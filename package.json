@@ -30,7 +30,12 @@
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
+  "bin": {
+    "fortytwo-scheduler": "dist/index.js"
+  },
   "dependencies": {
+    "@justfortytwo/memory": "^0.1.0",
+    "@justfortytwo/runner": "^0.1.0",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0"
   },
