@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { tick, backoffAt, RETRY_BACKOFF_MIN } from '../src/tick.js';
+import { describe, it, expect, vi } from 'vitest';
+import { tick, backoffAt, type TickDeps } from '../src/tick.js';
 import { createRegistry } from '../src/registry.js';
-import type { Job, Handler, Notification, TickDeps } from '../src/types.js';
+import type { Job, Handler, Notification } from '../src/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -175,5 +175,52 @@ describe('tick()', () => {
 
     expect(runSpy).toHaveBeenCalledOnce();
     expect(deps.completeCalls).toHaveLength(1);
+  });
+
+  it('malformed payload on job 1 → fail just job 1, job 2 still runs+completes', async () => {
+    const runSpy = vi.fn().mockResolvedValue({ ok: true, text: '' });
+    const handlerBad: Handler = { kind: 'bad', run: vi.fn().mockResolvedValue(null) };
+    const handlerGood: Handler = { kind: 'good', run: runSpy };
+
+    const job1 = makeJob({ id: 1, kind: 'bad', payload: '{bad json', attempts: 2 });
+    const job2 = makeJob({ id: 2, kind: 'good', recurrence: null });
+
+    const deps = makeDeps([job1, job2], handlerBad, {
+      registry: createRegistry([handlerBad, handlerGood]),
+    });
+
+    await tick(deps, NOW);
+
+    // job 1 failed (with backoff) before its handler ran
+    expect(handlerBad.run).not.toHaveBeenCalled();
+    expect(deps.failCalls).toHaveLength(1);
+    expect(deps.failCalls[0]![0]).toBe(job1.id);
+    expect(deps.failCalls[0]![2]).toEqual({ retryAt: backoffAt(NOW, job1.attempts) });
+
+    // job 2 was NOT dropped — the batch continued
+    expect(runSpy).toHaveBeenCalledOnce();
+    expect(deps.completeCalls).toHaveLength(1);
+    expect(deps.completeCalls[0]).toEqual([job2.id, {}]);
+  });
+
+  it('no handler on job 1 → fail just job 1, job 2 still runs+completes', async () => {
+    const runSpy = vi.fn().mockResolvedValue({ ok: true, text: '' });
+    const handlerGood: Handler = { kind: 'known', run: runSpy };
+
+    const job1 = makeJob({ id: 1, kind: 'unknown' });
+    const job2 = makeJob({ id: 2, kind: 'known', recurrence: null });
+
+    const deps = makeDeps([job1, job2], handlerGood);
+
+    await tick(deps, NOW);
+
+    expect(deps.failCalls).toHaveLength(1);
+    expect(deps.failCalls[0]![0]).toBe(job1.id);
+    expect(deps.failCalls[0]![1]).toMatch(/no handler/);
+
+    // job 2 was NOT dropped — the loop continued
+    expect(runSpy).toHaveBeenCalledOnce();
+    expect(deps.completeCalls).toHaveLength(1);
+    expect(deps.completeCalls[0]).toEqual([job2.id, {}]);
   });
 });

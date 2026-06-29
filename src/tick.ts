@@ -1,4 +1,4 @@
-import type { Job, Notification, Registry } from './types.js';
+import type { Job, Notification, Registry, RunCtx } from './types.js';
 
 export interface TickDeps {
   claimDue(now: string): Job[];
@@ -29,13 +29,19 @@ export async function tick(deps: TickDeps, now: string): Promise<void> {
       ? { reschedule: deps.recurrenceNext(job.recurrence, now) }
       : {};
 
-    const ctx = {
-      now,
-      payload: job.payload ? JSON.parse(job.payload) : undefined,
-    };
-
-    if (handler.hasWork && !(await handler.hasWork(ctx))) {
-      deps.complete(job.id, reschedule);
+    let ctx: RunCtx;
+    try {
+      ctx = { now, payload: job.payload ? JSON.parse(job.payload) : undefined };
+      if (handler.hasWork && !(await handler.hasWork(ctx))) {
+        deps.complete(job.id, reschedule);
+        continue;
+      }
+    } catch (e: unknown) {
+      deps.fail(
+        job.id,
+        e instanceof Error ? e.message : String(e),
+        { retryAt: backoffAt(now, job.attempts) },
+      );
       continue;
     }
 
