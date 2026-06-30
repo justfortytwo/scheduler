@@ -34,9 +34,8 @@
     "fortytwo-scheduler": "dist/index.js"
   },
   "dependencies": {
-    "@justfortytwo/memory": "^0.1.0",
+    "@justfortytwo/memory": "^0.1.5",
     "@justfortytwo/runner": "^0.1.0",
-    "@justfortytwo/telegram": "^0.1.0",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0"
   },
@@ -47,5 +46,13 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "peerDependencies": {
+    "@justfortytwo/telegram": "^0.1.5"
+  },
+  "peerDependenciesMeta": {
+    "@justfortytwo/telegram": {
+      "optional": true
+    }
   }
 }
