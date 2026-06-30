@@ -20,6 +20,7 @@ import {
 } from '@justfortytwo/memory';
 import { createRunner } from '@justfortytwo/runner';
 import { tick, type TickDeps } from './tick.js';
+import { heartbeatPath, writeHeartbeat } from './heartbeat.js';
 import { createJournalNotifier, createFanoutNotifier } from './notifier.js';
 import { buildRegistry, RECURRING_DEFS } from './handlers/index.js';
 import { seedRecurring } from './seed.js';
@@ -183,6 +184,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     recurrenceNext,
   );
 
+  // Write liveness heartbeat on boot.
+  const hbPath = heartbeatPath(opts.dbPath);
+  writeHeartbeat(hbPath, process.pid, new Date().toISOString());
+
   // Concurrency-1 PQueue: at most one handler run at a time.
   const queue = new PQueue({ concurrency: 1 });
 
@@ -197,6 +202,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   };
 
   const { poll } = makePoll(async () => {
+    writeHeartbeat(hbPath, process.pid, new Date().toISOString());
     await tick(deps, new Date().toISOString());
   });
 

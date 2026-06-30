@@ -29,6 +29,9 @@ export type { RecurringDef, RegistryDeps } from './handlers/index.js';
 export { seedRecurring } from './seed.js';
 export type { SeedStore } from './seed.js';
 
+// Phase 6 re-exports.
+export { heartbeatPath, writeHeartbeat } from './heartbeat.js';
+
 // ---------------------------------------------------------------------------
 // Bin guard — boot the daemon ONLY when this file is the direct entrypoint.
 // Mirrors telegram/src/bridge.ts `invokedAsBin()` exactly so importing this
