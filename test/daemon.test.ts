@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { recurrenceNext, makePoll } from '../src/daemon.js';
 
 // ---------------------------------------------------------------------------
@@ -79,5 +79,18 @@ describe('index.ts smoke', () => {
     expect(typeof mod.startDaemon).toBe('function');
     expect(typeof mod.POLL_MS).toBe('number');
     expect(typeof mod.STALE_RUNNING_MS).toBe('number');
+  });
+
+  it('importing index does not boot the daemon (no interval started)', async () => {
+    // Guard against a regression that inverts invokedAsBin() and boots on import.
+    // startDaemon is the only thing that calls setInterval; under vitest
+    // invokedAsBin() is false, so no interval should ever be scheduled.
+    const intervalSpy = vi.spyOn(global, 'setInterval');
+    try {
+      await import('../src/index.js');
+      expect(intervalSpy).not.toHaveBeenCalled();
+    } finally {
+      intervalSpy.mockRestore();
+    }
   });
 });
