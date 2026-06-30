@@ -48,7 +48,35 @@ function invokedAsBin(): boolean {
 if (invokedAsBin()) {
   const { startDaemon: boot } = await import('./daemon.js');
   const dbPath = process.env['DB_PATH'] ?? 'fortytwo.db';
-  boot({ dbPath }).catch((err: unknown) => {
+
+  // Optional Telegram push: when TELEGRAM_BOT_TOKEN + ALLOWED_CHAT_IDS are
+  // set, construct a Telegram sender and wire it as an extra notifier so the
+  // scheduler daemon can push notifications to Telegram in addition to the
+  // journal write.
+  //
+  // FLAG: ALLOWED_CHAT_IDS is expected to be a comma-separated list of chat
+  // ids (same format as the bridge); we use the first id as the target chat.
+  // If neither env var is set, extraNotifiers defaults to [] and only the
+  // journal notifier is active.
+  const extraNotifiers = await (async () => {
+    const token = process.env['TELEGRAM_BOT_TOKEN'];
+    const chatIdsRaw = process.env['ALLOWED_CHAT_IDS'];
+    if (!token || !chatIdsRaw) return [];
+    try {
+      // Lazy import so scheduler can run without @justfortytwo/telegram installed.
+      const { Telegram, parseAllowed, telegramNotifier } = await import('@justfortytwo/telegram');
+      const chatIds = parseAllowed(chatIdsRaw);
+      if (chatIds.size === 0) return [];
+      const chatId = [...chatIds][0]!;
+      const tg = new Telegram(token, chatIds);
+      return [telegramNotifier({ chatId, send: (id, text) => tg.sendMessage(id, text).then(() => undefined) })];
+    } catch (e: unknown) {
+      process.stderr.write(`fortytwo-scheduler: Telegram notifier wiring failed: ${(e as Error)?.message ?? e} — journal-only\n`);
+      return [];
+    }
+  })();
+
+  boot({ dbPath, extraNotifiers }).catch((err: unknown) => {
     process.stderr.write(`fortytwo-scheduler: ${(err as Error)?.stack ?? err}\n`);
     process.exit(1);
   });
