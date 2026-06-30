@@ -202,11 +202,18 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   };
 
   const { poll } = makePoll(async () => {
-    writeHeartbeat(hbPath, process.pid, new Date().toISOString());
     await tick(deps, new Date().toISOString());
   });
 
-  const interval = setInterval(() => void poll(), POLL_MS);
+  // Refresh the heartbeat on EVERY poll tick — outside the overlap guard — so a
+  // long-running `tick` (e.g. a multi-minute `claude` turn) does not starve the
+  // heartbeat. If the write were inside `tickFn`, a tick exceeding the poll
+  // interval would make every subsequent poll hit `if (running) return` and skip
+  // the refresh, and `fortytwo doctor` would falsely report the daemon stale.
+  const interval = setInterval(() => {
+    writeHeartbeat(hbPath, process.pid, new Date().toISOString());
+    void poll();
+  }, POLL_MS);
 
   // Return dispose function so callers (tests, signal handlers) can clean up.
   return () => clearInterval(interval);

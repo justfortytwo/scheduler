@@ -38,7 +38,7 @@ while true; do
   EMBED_MODEL=qwen3-embedding:0.6b \
   OLLAMA_BASE_URL=http://localhost:11434 \
   CLAUDE_BIN=$(which claude) \
-  FORTYTWO_ROOT=/path/to/fortytwo \
+  FORTYTWO_TURN_TIMEOUT=300 \
   npx fortytwo-scheduler
   echo "scheduler exited ($?); restarting in 3 s …"
   sleep 3
@@ -62,7 +62,7 @@ Environment=DB_PATH=/path/to/fortytwo/db/fortytwo.db
 Environment=EMBED_MODEL=qwen3-embedding:0.6b
 Environment=OLLAMA_BASE_URL=http://localhost:11434
 Environment=CLAUDE_BIN=/usr/local/bin/claude
-Environment=FORTYTWO_ROOT=/path/to/fortytwo
+Environment=FORTYTWO_TURN_TIMEOUT=300
 ExecStart=npx fortytwo-scheduler
 
 [Install]
@@ -78,14 +78,14 @@ Then: `systemctl enable --now fortytwo-scheduler`
 | `DB_PATH` | yes | Absolute path to `fortytwo.db` |
 | `EMBED_MODEL` | recommended | Ollama model name for semantic embeddings (falls back to FakeEmbedder) |
 | `OLLAMA_BASE_URL` | no | Ollama API base URL (default: `http://localhost:11434`) |
-| `CLAUDE_BIN` | yes | Path to the `claude` CLI binary |
-| `FORTYTWO_ROOT` | yes | Root directory of the fortytwo project |
+| `CLAUDE_BIN` | no | Path to the `claude` CLI binary the runner spawns (default: `claude` on `PATH`) |
+| `FORTYTWO_TURN_TIMEOUT` | no | Per-turn timeout in seconds for a spawned `claude` run (default: `300`) |
 | `TELEGRAM_BOT_TOKEN` | optional | Telegram bot token — enables push notifications to Telegram |
 | `ALLOWED_CHAT_IDS` | optional | Comma-separated Telegram chat IDs to push notifications to |
 
 ### Liveness / `fortytwo doctor`
 
-On boot and at the start of each 30-second poll cycle the daemon writes a heartbeat file at `$(dirname $DB_PATH)/scheduler.heartbeat` containing `{ "pid": <number>, "ts": "<ISO>" }`. `fortytwo doctor` reads this file and warns (non-fatal) if it is missing or older than 90 seconds.
+On boot and on every 30-second poll tick — even while a previous tick is still in flight — the daemon writes a heartbeat file at `$(dirname $DB_PATH)/scheduler.heartbeat` containing `{ "pid": <number>, "ts": "<ISO>" }`. The write is outside the poll's overlap guard so a long-running turn never starves it. `fortytwo doctor` reads this file and warns (non-fatal) if it is missing or older than 90 seconds.
 
 ## License
 

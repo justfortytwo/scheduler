@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { openDb, runMigrations, enqueue } from '@justfortytwo/memory';
 import { heartbeatPath, writeHeartbeat } from '../src/heartbeat.js';
+import { POLL_MS, startDaemon } from '../src/daemon.js';
+import { createRegistry } from '../src/registry.js';
 
 describe('heartbeatPath', () => {
   it('returns scheduler.heartbeat sibling of the DB file', () => {
@@ -46,5 +49,59 @@ describe('writeHeartbeat', () => {
     // mkdirSync will throw ENOTDIR. writeHeartbeat must swallow it.
     writeHeartbeat('/dev/null/scheduler.heartbeat', 42, new Date().toISOString());
     // reaching here without throw is the assertion
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: the heartbeat must refresh on EVERY poll, even while a long tick
+// is still in flight (overlap guard skips tick, but NOT the heartbeat write).
+// If the write were inside tickFn, a tick longer than the poll interval would
+// starve the heartbeat and doctor would falsely report the daemon stale.
+// ---------------------------------------------------------------------------
+describe('startDaemon — heartbeat refreshes during a long in-flight tick', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('writes a fresher heartbeat on a later poll while the first tick is still running', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hb-daemon-'));
+    let dispose: (() => void) | undefined;
+    try {
+      const dbPath = join(dir, 'fortytwo.db');
+      const hbPath = heartbeatPath(dbPath);
+
+      // Seed a due job whose handler never resolves — the first tick stays
+      // in-flight forever, so the overlap guard skips every subsequent poll.
+      const h = openDb(dbPath);
+      await runMigrations(h.k);
+      enqueue(h, { kind: 'blocking_job', run_at: '2020-01-01T00:00:00.000Z' });
+
+      const registry = createRegistry([
+        { kind: 'blocking_job', run: () => new Promise<never>(() => { /* never resolves */ }) },
+      ]);
+
+      // Pin the system clock so heartbeat ts is deterministic and advanceable.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-30T00:00:00.000Z'));
+
+      dispose = await startDaemon({ dbPath, registry });
+
+      // First poll fires: heartbeat written, tick starts (and blocks).
+      await vi.advanceTimersByTimeAsync(POLL_MS);
+      expect(existsSync(hbPath)).toBe(true);
+      const first = JSON.parse(readFileSync(hbPath, 'utf-8')) as { pid: number; ts: string };
+
+      // Advance another poll interval. The tick is still in flight (overlap
+      // guard skips it), but the heartbeat write — now OUTSIDE the guard — must
+      // still fire with a fresher timestamp.
+      await vi.advanceTimersByTimeAsync(POLL_MS);
+      const second = JSON.parse(readFileSync(hbPath, 'utf-8')) as { pid: number; ts: string };
+
+      expect(new Date(second.ts).getTime()).toBeGreaterThan(new Date(first.ts).getTime());
+      expect(second.pid).toBe(process.pid);
+    } finally {
+      dispose?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
