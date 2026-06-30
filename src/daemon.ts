@@ -160,11 +160,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   const registry: Registry = opts.registry ?? (() => {
     const runner = createRunner();
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
-    const now7dAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     return buildRegistry({
       runner,
       countPendingApprovals: () => countPendingApprovals(h),
-      recentCount: async () => (await query(h, { since: now7dAgo })).length,
+      // Compute the 7-day lookback per call so a long-running daemon's window
+      // does not drift forward from the boot-time instant.
+      recentCount: async () =>
+        (await query(h, { since: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() })).length,
       reembedOne,
     });
   })();
