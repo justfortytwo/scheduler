@@ -23,6 +23,12 @@ export { createJournalNotifier, createFanoutNotifier } from './notifier.js';
 export { startDaemon, recurrenceNext, makePoll, POLL_MS, STALE_RUNNING_MS } from './daemon.js';
 export type { DaemonOptions } from './daemon.js';
 
+// Phase 4 re-exports.
+export { RECURRING_DEFS, buildRegistry } from './handlers/index.js';
+export type { RecurringDef, RegistryDeps } from './handlers/index.js';
+export { seedRecurring } from './seed.js';
+export type { SeedStore } from './seed.js';
+
 // ---------------------------------------------------------------------------
 // Bin guard — boot the daemon ONLY when this file is the direct entrypoint.
 // Mirrors telegram/src/bridge.ts `invokedAsBin()` exactly so importing this

@@ -10,11 +10,19 @@ import {
   FakeEmbedder,
   OllamaEmbedder,
   store,
+  query,
+  reembed,
+  listActive,
+  enqueue,
+  setRecurrence,
+  countPendingApprovals,
   type Embedder,
 } from '@justfortytwo/memory';
+import { createRunner } from '@justfortytwo/runner';
 import { tick, type TickDeps } from './tick.js';
-import { createRegistry } from './registry.js';
 import { createJournalNotifier, createFanoutNotifier } from './notifier.js';
+import { buildRegistry, RECURRING_DEFS } from './handlers/index.js';
+import { seedRecurring } from './seed.js';
 import type { Notifier, Registry } from './types.js';
 
 /** Poll interval: how often `tick` is invoked to drain due jobs. */
@@ -148,6 +156,31 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   const allNotifiers: Notifier[] = [journalNotifier, ...(opts.extraNotifiers ?? [])];
   const fanout = createFanoutNotifier(allNotifiers);
 
+  // Build the real handler registry (or accept the injected one for tests).
+  const registry: Registry = opts.registry ?? (() => {
+    const runner = createRunner();
+    const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
+    const now7dAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    return buildRegistry({
+      runner,
+      countPendingApprovals: () => countPendingApprovals(h),
+      recentCount: async () => (await query(h, { since: now7dAgo })).length,
+      reembedOne,
+    });
+  })();
+
+  // Seed recurring job rows from the in-code definitions (idempotent on every boot).
+  seedRecurring(
+    {
+      listActive: () => listActive(h),
+      enqueue: (j) => enqueue(h, j),
+      setRecurrence: (id, rec, at) => setRecurrence(h, id, rec, at),
+    },
+    RECURRING_DEFS,
+    new Date().toISOString(),
+    recurrenceNext,
+  );
+
   // Concurrency-1 PQueue: at most one handler run at a time.
   const queue = new PQueue({ concurrency: 1 });
 
@@ -158,7 +191,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     recurrenceNext,
     enqueueRun: (fn) => queue.add(fn) as Promise<void>,
     notify: (notification) => fanout.notify(notification),
-    registry: opts.registry ?? createRegistry([]),
+    registry,
   };
 
   const { poll } = makePoll(async () => {
