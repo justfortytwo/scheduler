@@ -3,3 +3,6 @@ dist/
 *.js.map
 *.d.ts
 .DS_Store
+.claude/
+.codegraph/
+.wolf/
