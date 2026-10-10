@@ -1,6 +1,6 @@
 {
   "name": "@justfortytwo/scheduler",
-  "version": "0.1.0",
+  "version": "1.0.0-0",
   "description": "Durable job scheduler daemon for justfortytwo — drains a jobs queue and fires LLM turns behind a cheap gate.",
   "license": "MIT",
   "author": {
