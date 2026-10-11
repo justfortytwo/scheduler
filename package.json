@@ -34,13 +34,13 @@
     "fortytwo-scheduler": "dist/index.js"
   },
   "dependencies": {
-    "@justfortytwo/memory": "^0.1.5",
+    "@justfortytwo/memory": "^1.0.0-0",
     "@justfortytwo/runner": "^0.1.0",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0"
   },
   "devDependencies": {
-    "@justfortytwo/telegram": "^1.0.0-1",
+    "@justfortytwo/telegram": "^1.0.0-2",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
