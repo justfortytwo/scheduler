@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+import { makeOneirosHandler, oneirosEnabled, seedOneiros } from './oneiros.js';
 import { Cron } from 'croner';
 import PQueue from 'p-queue';
 import {
@@ -162,7 +164,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     const runner = createRunner();
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
     return buildRegistry({
-      runner,
+      runner: async (prompt) => runner.run({ prompt }),
+      oneiros: oneirosEnabled(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd())) ? makeOneirosHandler(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd()), h) : undefined,
       countPendingApprovals: () => countPendingApprovals(h),
       // Compute the 7-day lookback per call so a long-running daemon's window
       // does not drift forward from the boot-time instant.
@@ -183,6 +186,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     new Date().toISOString(),
     recurrenceNext,
   );
+
+  if (oneirosEnabled(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd()))) seedOneiros(h, new Date().toISOString(), recurrenceNext);
 
   // Write liveness heartbeat on boot.
   const hbPath = heartbeatPath(opts.dbPath);

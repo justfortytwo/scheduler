@@ -1,5 +1,5 @@
 import { createRegistry } from '../registry.js';
-import type { Registry } from '../types.js';
+import type { Handler, Registry } from '../types.js';
 import type { RunnerFn } from './recurring.js';
 import type { ReembedOneFn } from './reembed.js';
 import { makeRecurringHandler } from './recurring.js';
@@ -46,6 +46,7 @@ export const RECURRING_DEFS: RecurringDef[] = [
 // ---------------------------------------------------------------------------
 
 export interface RegistryDeps {
+  oneiros?: Handler;
   /** Bound `createRunner()` return value. */
   runner: RunnerFn;
   /** Returns the count of pending approvals (injected so tests can fake it). */
@@ -63,6 +64,7 @@ export function buildRegistry(deps: RegistryDeps): Registry {
   const { runner, countPendingApprovals, recentCount, reembedOne } = deps;
 
   return createRegistry([
+    ...(deps.oneiros ? [deps.oneiros] : []),
     // --- Recurring: ungated ---
     makeRecurringHandler({
       kind: 'daily_briefing',

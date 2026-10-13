@@ -84,3 +84,5 @@ if (invokedAsBin()) {
     process.exit(1);
   });
 }
+
+export { ONEIROS_DEF, seedOneiros, makeOneirosHandler } from './oneiros.js';

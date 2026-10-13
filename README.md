@@ -90,3 +90,15 @@ On boot and on every 30-second poll tick — even while a previous tick is still
 ## License
 
 MIT © 2026 Enrico Deleo
+
+## Oneiros maintenance
+
+`persona.oneiros` runs daily at `17 3 * * *` UTC, with null payload and the existing
+durable retry/claim mechanism. Installer seeds it after initializing persona's
+checkpoint; daemon boot reconciles the same job when the checkpoint exists.
+The cheap gate checks the memory head. Persona validates and applies additions;
+scheduler runs the private prompt through runner in an isolated temporary cwd.
+No tools, MCP, skills or session persistence are enabled, and maintenance emits
+no notification into memory. Authentication/provider configuration is preserved.
+Requires a Claude CLI with `--safe-mode`; unsupported flags fail closed.
+Stop the runtime before upgrading packages and start it again afterwards.
