@@ -34,7 +34,7 @@
     "fortytwo-scheduler": "dist/index.js"
   },
   "dependencies": {
-    "@justfortytwo/memory": "1.0.0-1",
+    "@justfortytwo/memory": "1.0.0-2",
     "@justfortytwo/runner": "1.0.0-0",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0",
