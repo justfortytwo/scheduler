@@ -38,7 +38,7 @@
     "@justfortytwo/runner": "1.0.0-0",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0",
-    "@justfortytwo/persona": "1.0.0-1"
+    "@justfortytwo/persona": "1.0.0-2"
   },
   "devDependencies": {
     "@justfortytwo/telegram": "^1.0.0-2",
