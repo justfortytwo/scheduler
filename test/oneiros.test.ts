@@ -47,3 +47,46 @@ it('dispatches a real persistent Oneiros job, skips empty memory, and checkpoint
     expect(notify).not.toHaveBeenCalled();
   } finally {await h.k.destroy();h.raw.close();rmSync(root,{recursive:true,force:true});}
 });
+
+it('reports work from the transcript alone and passes both sources to refine', async()=>{
+  const {mkdtempSync,mkdirSync,writeFileSync,rmSync}=await import('node:fs');
+  const {tmpdir}=await import('node:os'); const {join}=await import('node:path');
+  const memory=await import('@justfortytwo/memory'); const persona=await import('@justfortytwo/persona');
+  const {makeOneirosHandler}=await import('../src/oneiros.js');
+  const root=mkdtempSync(join(tmpdir(),'oneiros-transcript-')); const h=memory.openDb(join(root,'memory.db'));
+  try {
+    await memory.runMigrations(h.k); mkdirSync(join(root,'context'));
+    writeFileSync(join(root,'context/PROFILE.md'),'# Profile\n\n## Voice\nCurated voice.\n');
+    const tHead={database:'t-db',position:0};
+    persona.initialize(root,memory.memoryHead(h),'memory');
+    persona.initialize(root,tHead,'transcript');
+    let position=0;
+    const transcript={
+      head:()=>({database:'t-db',position}),
+      delta:(c:any)=>({cursor:{database:'t-db',position},entries:position>c.position?[{id:1,content:'I like short replies',channel:'telegram',direction:'inbound',actor:'owner',kind:'message',created_at:'2026-01-01T00:00:00Z'}] as any:[]}),
+    };
+    const worker=vi.fn(async()=>({additions:[]}));
+    const without=makeOneirosHandler(root,h,worker);
+    const withT=makeOneirosHandler(root,h,worker,transcript);
+    expect(await without.hasWork!(undefined as any)).toBe(false);
+    expect(await withT.hasWork!(undefined as any)).toBe(false);
+    position=1;
+    expect(await without.hasWork!(undefined as any)).toBe(false);
+    expect(await withT.hasWork!(undefined as any)).toBe(true);
+    await withT.run(undefined as any);
+    expect(worker).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify((worker.mock.calls[0] as any[])[0])).toContain('I like short replies');
+  } finally {await h.k.destroy();h.raw.close();rmSync(root,{recursive:true,force:true});}
+});
+
+it('loadTranscriptSource adapts transcriptHead/transcriptDelta and degrades to undefined', async()=>{
+  const {loadTranscriptSource}=await import('../src/oneiros.js');
+  const h={} as any;
+  const head={database:'d',position:3};
+  const mod={transcriptHead:vi.fn(()=>head),transcriptDelta:vi.fn(()=>({cursor:head,entries:[]}))};
+  const src=await loadTranscriptSource(h,async()=>mod);
+  expect(src!.head()).toBe(head);
+  expect(src!.delta({database:'d',position:1})).toEqual({cursor:head,entries:[]});
+  expect(mod.transcriptDelta).toHaveBeenCalledWith(h,{database:'d',position:1});
+  expect(await loadTranscriptSource(h,async()=>{throw new Error('missing');})).toBeUndefined();
+});

@@ -72,9 +72,11 @@ Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js
   `learn_review`) are seeded on every boot; a changed cron updates the existing row. Crons are
   evaluated in **UTC** (`recurrenceNext` uses croner with `timezone: 'UTC'`).
 - Gates: `sweep` runs only if pending approvals > 0; `learn_review` only if memories in the last
-  7 days > 0 (window computed per call, not at boot); `daily_briefing` is ungated.
-- **Notifications**: journal notifier writes via memory `store()` with `source: 'scheduler:wake'`;
-  extra notifiers are fanned out and their failures are swallowed so the journal write always happens.
+  7 days > 0 (memory rows only; journal entries now live in the transcript, so it fires less often) (window computed per call, not at boot); `daily_briefing` is ungated.
+- **Notifications**: journal notifier appends to the `ConversationLog` (`src/conversation-log.ts`, channel `scheduler`, notification kind in `kind`;
+  `source: 'scheduler:wake'` is no longer used) fire-and-forget, failures logged to stderr; with no `@justfortytwo/transcript`
+  it is a no-op. Extra notifiers are fanned out and their failures are swallowed.
+  Oneiros also reads the transcript via `loadTranscriptSource` (undefined when not installed).
 - **Heartbeat**: `$(dirname DB_PATH)/scheduler.heartbeat` with `{ pid, ts }`, written on boot and on
   every interval *outside* the overlap guard so long `claude` turns do not make it go stale.
 

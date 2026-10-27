@@ -96,9 +96,18 @@ MIT © 2026 Enrico Deleo
 `persona.oneiros` runs daily at `17 3 * * *` UTC, with null payload and the existing
 durable retry/claim mechanism. Installer seeds it after initializing persona's
 checkpoint; daemon boot reconciles the same job when the checkpoint exists.
-The cheap gate checks the memory head. Persona validates and applies additions;
+The cheap gate checks the memory head and, when the optional `@justfortytwo/transcript`
+peer is installed, the transcript head. Persona validates and applies additions;
 scheduler runs the private prompt through runner in an isolated temporary cwd.
 No tools, MCP, skills or session persistence are enabled, and maintenance emits
 no notification into memory. Authentication/provider configuration is preserved.
 Requires a Claude CLI with `--safe-mode`; unsupported flags fail closed.
 Stop the runtime before upgrading packages and start it again afterwards.
+
+## Journal
+
+Each job notification is appended to the conversation log (`channel: 'scheduler'`, the
+notification kind in `kind`) when the optional `@justfortytwo/transcript` peer is
+installed; otherwise it is a no-op. It is no longer stored as a memory row
+(`source: 'scheduler:wake'` is retired), so the `learn_review` gate, which counts memory
+rows only, fires less often.

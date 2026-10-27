@@ -50,10 +50,14 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@justfortytwo/telegram": "^0.1.5 || ^1.0.0-0"
+    "@justfortytwo/telegram": "^0.1.5 || ^1.0.0-0",
+    "@justfortytwo/transcript": "^1.0.0-0"
   },
   "peerDependenciesMeta": {
     "@justfortytwo/telegram": {
+      "optional": true
+    },
+    "@justfortytwo/transcript": {
       "optional": true
     }
   }

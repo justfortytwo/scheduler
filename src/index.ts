@@ -86,3 +86,7 @@ if (invokedAsBin()) {
 }
 
 export { ONEIROS_DEF, seedOneiros, makeOneirosHandler } from './oneiros.js';
+export { loadTranscriptSource } from './oneiros.js';
+export { loadConversationLog, noopConversationLog } from './conversation-log.js';
+export type { ConversationEvent, ConversationLog } from './conversation-log.js';
+export { makeJournalWrite } from './daemon.js';

@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
-import { makeOneirosHandler, oneirosEnabled, seedOneiros } from './oneiros.js';
+import { loadTranscriptSource, makeOneirosHandler, oneirosEnabled, seedOneiros } from './oneiros.js';
+import { loadConversationLog, type ConversationLog } from './conversation-log.js';
 import { Cron } from 'croner';
 import PQueue from 'p-queue';
 import {
@@ -11,7 +12,6 @@ import {
   requeueStale,
   FakeEmbedder,
   OllamaEmbedder,
-  store,
   query,
   reembed,
   listActive,
@@ -88,6 +88,30 @@ export function makePoll(tickFn: () => Promise<void>): {
 }
 
 // ---------------------------------------------------------------------------
+// makeJournalWrite
+// ---------------------------------------------------------------------------
+
+/**
+ * Journal write backed by a ConversationLog. Fire-and-forget (like the
+ * telegram bridge): failures, sync or async, are logged to stderr and never
+ * propagate, so a broken transcript cannot affect the job or other notifiers.
+ */
+export function makeJournalWrite(log: ConversationLog): (n: { kind: string; text: string }) => Promise<void> {
+  return async (n) => {
+    const fail = (e: unknown): void => {
+      process.stderr.write(`fortytwo-scheduler: journal append failed: ${(e as Error)?.message ?? e}\n`);
+    };
+    try {
+      void Promise.resolve(log.append({
+        channel: 'scheduler', direction: 'outbound', actor: 'assistant', kind: n.kind, content: n.text,
+      })).catch(fail);
+    } catch (e: unknown) {
+      fail(e);
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // startDaemon options
 // ---------------------------------------------------------------------------
 
@@ -120,15 +144,9 @@ export interface DaemonOptions {
  *    notify (fanout: journal + optional extras), and the injected registry.
  * 4. Starts a 30-second setInterval poll loop with an overlap guard.
  *
- * Journal write: each notification is stored via memory's generic `store` fn
- * with source='scheduler:wake'. The embedder is OllamaEmbedder when
- * EMBED_MODEL is set, else FakeEmbedder (same pattern as telegram/bridge.ts).
- *
- * CONCERN: using FakeEmbedder in production means scheduler-emitted journal
- * entries are not semantically searchable (fake vectors). This matches the
- * bridge's current pattern for channel events and is acceptable for Phase 3.
- * It should be revisited when a persistent embedder is always available (e.g.
- * Phase 4+ where EMBED_MODEL is part of the required env).
+ * Journal write: each notification is appended to the ConversationLog
+ * (channel 'scheduler', no-op when @justfortytwo/transcript is absent). The
+ * embedder is OllamaEmbedder when EMBED_MODEL is set, else FakeEmbedder.
  *
  * @returns A dispose fn that clears the poll interval.
  */
@@ -145,27 +163,22 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     ? new OllamaEmbedder(process.env['EMBED_MODEL'], process.env['OLLAMA_BASE_URL'])
     : new FakeEmbedder();
 
-  // Journal notifier: persists each Notification as a memory entry.
-  const journalWrite = async (n: { kind: string; text: string }): Promise<void> => {
-    await store(h, embedder, {
-      content: `[scheduler:${n.kind}] ${n.text}`,
-      source: 'scheduler:wake',
-      observed: 'internal',
-      tags: ['scheduler', n.kind],
-    });
-  };
+  // Journal notifier: appends each Notification to the conversation log.
+  const log = await loadConversationLog(h, embedder);
+  const journalWrite = makeJournalWrite(log);
 
   const journalNotifier = createJournalNotifier(journalWrite);
   const allNotifiers: Notifier[] = [journalNotifier, ...(opts.extraNotifiers ?? [])];
   const fanout = createFanoutNotifier(allNotifiers);
 
   // Build the real handler registry (or accept the injected one for tests).
+  const transcript = opts.registry ? undefined : await loadTranscriptSource(h);
   const registry: Registry = opts.registry ?? (() => {
     const runner = createRunner();
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
     return buildRegistry({
       runner: async (prompt) => runner.run({ prompt }),
-      oneiros: oneirosEnabled(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd())) ? makeOneirosHandler(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd()), h) : undefined,
+      oneiros: oneirosEnabled(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd())) ? makeOneirosHandler(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd()), h, undefined, transcript) : undefined,
       countPendingApprovals: () => countPendingApprovals(h),
       // Compute the 7-day lookback per call so a long-running daemon's window
       // does not drift forward from the boot-time instant.

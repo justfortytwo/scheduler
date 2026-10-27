@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRunner, type RunOptions, type RunResult } from '@justfortytwo/runner';
-import { hasWork, refine, workerPrompt, type WorkerInput } from '@justfortytwo/persona';
+import { hasWork, refine, workerPrompt, type WorkerInput, type TranscriptSource } from '@justfortytwo/persona';
 import { memoryHead, memoryDelta, listActive, enqueue, setRecurrence, type DbHandles } from '@justfortytwo/memory';
 import { seedRecurring } from './seed.js';
 import type { Handler } from './types.js';
@@ -31,10 +31,32 @@ export async function isolatedWorker(input: WorkerInput, run: (options: RunOptio
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 export function oneirosEnabled(root: string): boolean { return existsSync(join(root, '.fortytwo/oneiros/checkpoint.json')); }
-export function makeOneirosHandler(root: string, h: DbHandles, worker: typeof isolatedWorker = isolatedWorker): Handler {
+export function makeOneirosHandler(root: string, h: DbHandles, worker: typeof isolatedWorker = isolatedWorker, transcript?: TranscriptSource): Handler {
   const memory = { head: () => memoryHead(h), delta: (cursor: ReturnType<typeof memoryHead>) => memoryDelta(h,cursor) };
   return { kind: ONEIROS_DEF.kind,
-    hasWork: async () => hasWork(root,memory),
-    run: async () => { await refine({root,memory,worker}); return null; },
+    hasWork: async () => hasWork(root,memory,transcript),
+    run: async () => { await refine({root,memory,transcript,worker}); return null; },
   };
+}
+
+type TranscriptModule = {
+  transcriptHead: (h: unknown) => ReturnType<TranscriptSource['head']>;
+  transcriptDelta: (h: unknown, cursor: Parameters<TranscriptSource['delta']>[0]) => ReturnType<TranscriptSource['delta']>;
+};
+
+/**
+ * Adapt the optional @justfortytwo/transcript peer into a TranscriptSource.
+ * Any failure (not installed) yields undefined: oneiros then reads memory only.
+ */
+export async function loadTranscriptSource(
+  h: unknown,
+  importer: (name: string) => Promise<unknown> = (n) => import(n),
+): Promise<TranscriptSource | undefined> {
+  try {
+    const mod = (await importer('@justfortytwo/transcript')) as TranscriptModule;
+    if (typeof mod.transcriptHead !== 'function' || typeof mod.transcriptDelta !== 'function') return undefined;
+    return { head: () => mod.transcriptHead(h), delta: (cursor) => mod.transcriptDelta(h, cursor) };
+  } catch {
+    return undefined;
+  }
 }
