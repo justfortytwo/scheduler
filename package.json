@@ -1,6 +1,6 @@
 {
   "name": "@justfortytwo/scheduler",
-  "version": "1.0.0-4",
+  "version": "1.0.0",
   "description": "Durable job scheduler daemon for justfortytwo — drains a jobs queue and fires LLM turns behind a cheap gate.",
   "license": "MIT",
   "author": {
@@ -34,14 +34,14 @@
     "fortytwo-scheduler": "dist/index.js"
   },
   "dependencies": {
-    "@justfortytwo/memory": "1.0.0-3",
-    "@justfortytwo/persona": "1.0.0-3",
-    "@justfortytwo/runner": "1.0.0-0",
+    "@justfortytwo/memory": "1.0.0",
+    "@justfortytwo/persona": "1.0.0",
+    "@justfortytwo/runner": "1.0.0",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0"
   },
   "devDependencies": {
-    "@justfortytwo/telegram": "^1.0.0-2",
+    "@justfortytwo/telegram": "^1.0.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
@@ -50,8 +50,8 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@justfortytwo/telegram": "^0.1.5 || ^1.0.0-0",
-    "@justfortytwo/transcript": "^1.0.0-0"
+    "@justfortytwo/telegram": "^0.1.5 || ^1.0.0",
+    "@justfortytwo/transcript": "^1.0.0"
   },
   "peerDependenciesMeta": {
     "@justfortytwo/telegram": {
