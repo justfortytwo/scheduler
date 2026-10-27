@@ -35,10 +35,10 @@
   },
   "dependencies": {
     "@justfortytwo/memory": "1.0.0-3",
+    "@justfortytwo/persona": "1.0.0-3",
     "@justfortytwo/runner": "1.0.0-0",
     "croner": "^10.0.0",
-    "p-queue": "^9.0.0",
-    "@justfortytwo/persona": "1.0.0-3"
+    "p-queue": "^9.0.0"
   },
   "devDependencies": {
     "@justfortytwo/telegram": "^1.0.0-2",
