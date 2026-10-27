@@ -68,10 +68,12 @@ it('reports work from the transcript alone and passes both sources to refine', a
     const worker=vi.fn(async()=>({additions:[]}));
     const without=makeOneirosHandler(root,h,worker);
     const withT=makeOneirosHandler(root,h,worker,transcript);
-    expect(await without.hasWork!(undefined as any)).toBe(false);
+    // An initialised transcript stream without its source fails closed.
+    await expect(without.hasWork!(undefined as any)).rejects.toThrow(/transcript source unavailable/);
     expect(await withT.hasWork!(undefined as any)).toBe(false);
     position=1;
-    expect(await without.hasWork!(undefined as any)).toBe(false);
+    await expect(without.run(undefined as any)).rejects.toThrow(/transcript source unavailable/);
+    expect(worker).not.toHaveBeenCalled();
     expect(await withT.hasWork!(undefined as any)).toBe(true);
     await withT.run(undefined as any);
     expect(worker).toHaveBeenCalledTimes(1);
@@ -79,14 +81,25 @@ it('reports work from the transcript alone and passes both sources to refine', a
   } finally {await h.k.destroy();h.raw.close();rmSync(root,{recursive:true,force:true});}
 });
 
-it('loadTranscriptSource adapts transcriptHead/transcriptDelta and degrades to undefined', async()=>{
+it('loadTranscriptSource adapts transcriptHead/transcriptDelta with a 20-row page and passes row meta through', async()=>{
   const {loadTranscriptSource}=await import('../src/oneiros.js');
   const h={} as any;
   const head={database:'d',position:3};
-  const mod={transcriptHead:vi.fn(()=>head),transcriptDelta:vi.fn(()=>({cursor:head,entries:[]}))};
+  const row={id:2,ts:'2026-10-27T00:00:00Z',channel:'telegram',direction:'inbound',actor:'owner',kind:'message',thread_id:'42',content:'hi',meta:'{"source_kind":"message","telegram":{"has_forward":true}}',legacy_memory_id:null};
+  const mod={transcriptHead:vi.fn(()=>head),transcriptDelta:vi.fn(()=>({cursor:head,entries:[row]}))};
   const src=await loadTranscriptSource(h,async()=>mod);
   expect(src!.head()).toBe(head);
-  expect(src!.delta({database:'d',position:1})).toEqual({cursor:head,entries:[]});
-  expect(mod.transcriptDelta).toHaveBeenCalledWith(h,{database:'d',position:1});
-  expect(await loadTranscriptSource(h,async()=>{throw new Error('missing');})).toBeUndefined();
+  expect(src!.delta({database:'d',position:1})).toEqual({cursor:head,entries:[{id:2,channel:'telegram',direction:'inbound',actor:'owner',kind:'message',content:'hi',thread_id:'42',meta:row.meta}]});
+  expect(mod.transcriptDelta).toHaveBeenCalledWith(h,{database:'d',position:1},20);
+});
+it('loadTranscriptSource degrades to undefined but reports why on stderr', async()=>{
+  const {loadTranscriptSource}=await import('../src/oneiros.js');
+  const err=vi.spyOn(process.stderr,'write').mockImplementation(()=>true);
+  try {
+    expect(await loadTranscriptSource({} as any,async()=>{throw new Error('missing');})).toBeUndefined();
+    expect(String(err.mock.calls.at(-1)?.[0])).toMatch(/fortytwo-scheduler: .*transcript.*missing/);
+    expect(await loadTranscriptSource({} as any,async()=>({transcriptHead:()=>null}))).toBeUndefined();
+    expect(String(err.mock.calls.at(-1)?.[0])).toMatch(/fortytwo-scheduler: .*transcript.*transcriptDelta/);
+    expect(err).toHaveBeenCalledTimes(2);
+  } finally { err.mockRestore(); }
 });

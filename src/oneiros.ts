@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRunner, type RunOptions, type RunResult } from '@justfortytwo/runner';
-import { hasWork, refine, workerPrompt, type WorkerInput, type TranscriptSource } from '@justfortytwo/persona';
+import { hasWork, refine, workerPrompt, type WorkerInput, type TranscriptSource, type TranscriptEvidenceRow } from '@justfortytwo/persona';
 import { memoryHead, memoryDelta, listActive, enqueue, setRecurrence, type DbHandles } from '@justfortytwo/memory';
 import { seedRecurring } from './seed.js';
 import type { Handler } from './types.js';
@@ -41,22 +41,42 @@ export function makeOneirosHandler(root: string, h: DbHandles, worker: typeof is
 
 type TranscriptModule = {
   transcriptHead: (h: unknown) => ReturnType<TranscriptSource['head']>;
-  transcriptDelta: (h: unknown, cursor: Parameters<TranscriptSource['delta']>[0]) => ReturnType<TranscriptSource['delta']>;
+  transcriptDelta: (h: unknown, cursor: Parameters<TranscriptSource['delta']>[0], limit?: number) => { cursor: ReturnType<TranscriptSource['head']>; entries: Array<TranscriptEvidenceRow & Record<string, unknown>> };
 };
+
+/** Transcript rows per Oneiros round; smaller than the package default to keep the worker input within budget. */
+export const TRANSCRIPT_PAGE_LIMIT = 20;
 
 /**
  * Adapt the optional @justfortytwo/transcript peer into a TranscriptSource.
- * Any failure (not installed) yields undefined: oneiros then reads memory only.
+ * Any failure (not installed, missing exports) yields undefined and is reported
+ * on stderr. Persona then refuses to run if a transcript stream was initialised,
+ * so a missing source is never silently skipped.
  */
 export async function loadTranscriptSource(
   h: unknown,
   importer: (name: string) => Promise<unknown> = (n) => import(n),
 ): Promise<TranscriptSource | undefined> {
+  let mod: TranscriptModule;
   try {
-    const mod = (await importer('@justfortytwo/transcript')) as TranscriptModule;
-    if (typeof mod.transcriptHead !== 'function' || typeof mod.transcriptDelta !== 'function') return undefined;
-    return { head: () => mod.transcriptHead(h), delta: (cursor) => mod.transcriptDelta(h, cursor) };
-  } catch {
+    mod = (await importer('@justfortytwo/transcript')) as TranscriptModule;
+  } catch (e: unknown) {
+    process.stderr.write(`fortytwo-scheduler: transcript source unavailable (import @justfortytwo/transcript failed): ${(e as Error)?.message ?? e}\n`);
     return undefined;
   }
+  if (typeof mod?.transcriptHead !== 'function' || typeof mod?.transcriptDelta !== 'function') {
+    process.stderr.write('fortytwo-scheduler: transcript source unavailable (@justfortytwo/transcript lacks transcriptHead/transcriptDelta)\n');
+    return undefined;
+  }
+  return {
+    head: () => mod.transcriptHead(h),
+    delta: (cursor) => {
+      const d = mod.transcriptDelta(h, cursor, TRANSCRIPT_PAGE_LIMIT);
+      // Explicit mapping: exactly the fields persona reads, including the row meta.
+      return { cursor: d.cursor, entries: d.entries.map((r) => ({
+        id: r.id, channel: r.channel, direction: r.direction, actor: r.actor, kind: r.kind,
+        content: r.content, thread_id: r.thread_id, meta: r.meta,
+      })) };
+    },
+  };
 }

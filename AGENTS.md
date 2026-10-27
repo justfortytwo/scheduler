@@ -6,7 +6,7 @@ Guidance for AI coding agents working in `@justfortytwo/scheduler`.
 
 A long-running daemon (`fortytwo-scheduler`) that drains the durable `jobs` table stored in
 `@justfortytwo/memory`. It fires an LLM turn (via `@justfortytwo/runner`, which spawns the `claude` CLI)
-only after a cheap `hasWork` gate says there is real work. Results go to the memory journal and, if
+only after a cheap `hasWork` gate says there is real work. Results go to the conversation log (`@justfortytwo/transcript`) and, if
 configured, to Telegram. The design doc is `../docs/scheduler.md` (the sibling `docs` repo).
 
 ## Layout
@@ -76,7 +76,9 @@ Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js
 - **Notifications**: journal notifier appends to the `ConversationLog` (`src/conversation-log.ts`, channel `scheduler`, notification kind in `kind`;
   `source: 'scheduler:wake'` is no longer used) fire-and-forget, failures logged to stderr; with no `@justfortytwo/transcript`
   it is a no-op. Extra notifiers are fanned out and their failures are swallowed.
-  Oneiros also reads the transcript via `loadTranscriptSource` (undefined when not installed).
+  Oneiros also reads the transcript via `loadTranscriptSource` (20-row pages, row `meta` passed
+  through; undefined when not installed, reported on stderr). An initialised transcript stream with
+  no source makes the Oneiros job fail closed in persona.
 - **Heartbeat**: `$(dirname DB_PATH)/scheduler.heartbeat` with `{ pid, ts }`, written on boot and on
   every interval *outside* the overlap guard so long `claude` turns do not make it go stale.
 
@@ -98,7 +100,9 @@ Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js
 ## Sibling repos (`../`)
 
 - `memory` - SQLite DB, migrations, `jobs` table and job functions (`claimDue`, `complete`, `fail`,
-  `enqueue`, `setRecurrence`, `requeueStale`, `listActive`), journal `store`/`query`, embedders.
+  `enqueue`, `setRecurrence`, `requeueStale`, `listActive`), memory `store`/`query`, embedders.
+- `transcript` - the conversation log (`createTranscript`) and Oneiros transcript source
+  (`transcriptHead`/`transcriptDelta`).
 - `runner` - `createRunner()` which spawns the `claude` CLI for one turn.
 - `telegram` - `telegramNotifier` (structural, does not import this package); the bridge enqueues
   jobs for this daemon and no longer runs proactive wakes itself.

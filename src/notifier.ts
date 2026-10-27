@@ -2,9 +2,9 @@ import type { Notification, Notifier } from './types.js';
 
 /**
  * Creates a notifier that forwards every notification to the injected `write`
- * callback. The daemon supplies the real write that persists entries to the
- * memory journal. Using DI keeps the journalling logic testable without
- * opening a real database.
+ * callback. The daemon supplies the real write that appends entries to the
+ * conversation log (the transcript, or a no-op when it is not installed). Using
+ * DI keeps the logging logic testable without opening a real database.
  */
 export function createJournalNotifier(
   write: (n: Notification) => Promise<void>,

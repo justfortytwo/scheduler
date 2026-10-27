@@ -98,15 +98,15 @@ export function makePoll(tickFn: () => Promise<void>): {
  */
 export function makeJournalWrite(log: ConversationLog): (n: { kind: string; text: string }) => Promise<void> {
   return async (n) => {
-    const fail = (e: unknown): void => {
+    const reportAppendFailure = (e: unknown): void => {
       process.stderr.write(`fortytwo-scheduler: journal append failed: ${(e as Error)?.message ?? e}\n`);
     };
     try {
       void Promise.resolve(log.append({
         channel: 'scheduler', direction: 'outbound', actor: 'assistant', kind: n.kind, content: n.text,
-      })).catch(fail);
+      })).catch(reportAppendFailure);
     } catch (e: unknown) {
-      fail(e);
+      reportAppendFailure(e);
     }
   };
 }
