@@ -81,7 +81,9 @@ Then: `systemctl enable --now fortytwo-scheduler`
 | `CLAUDE_BIN` | no | Path to the `claude` CLI binary the runner spawns (default: `claude` on `PATH`) |
 | `FORTYTWO_TURN_TIMEOUT` | no | Per-turn timeout in seconds for a spawned `claude` run (default: `300`) |
 | `TELEGRAM_BOT_TOKEN` | optional | Telegram bot token — enables push notifications to Telegram |
-| `ALLOWED_CHAT_IDS` | optional | Comma-separated Telegram chat IDs to push notifications to |
+| `ALLOWED_CHAT_IDS` | optional | Comma-separated Telegram chat IDs; when set, notifications go to the **first** id. When unset, they go to every chat paired with `fortytwo pair` |
+| `FORTYTWO_ROOT` | no | Project root used to find the Telegram bindings db (default: the working directory) |
+| `TELEGRAM_BINDINGS_DB` | no | Bindings db path, relative to the root (default: `state/telegram-bindings.db`); must match the bridge |
 
 ### Liveness / `fortytwo doctor`
 

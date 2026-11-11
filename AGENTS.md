@@ -20,6 +20,7 @@ src/
   daemon.ts         startDaemon(): DB open + migrations, stale requeue, seeding, 30s poll, PQueue(1)
   seed.ts           seedRecurring(): idempotent upsert of recurring rows from RECURRING_DEFS
   notifier.ts       Journal notifier + fanout notifier (per-notifier errors swallowed)
+  telegram-push.ts  Telegram push targets (ALLOWED_CHAT_IDS or paired chats) + push notifier; no telegram import
   heartbeat.ts      heartbeatPath() / writeHeartbeat() (best-effort, never throws)
   handlers/
     index.ts        RECURRING_DEFS (cron + trigger prompt) and buildRegistry()
@@ -44,7 +45,8 @@ From `package.json` (Node >= 20, npm, lockfile present):
 
 Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js`
 (or `npx fortytwo-scheduler`). See README for the env table: `DB_PATH`, `EMBED_MODEL`,
-`OLLAMA_BASE_URL`, `CLAUDE_BIN`, `FORTYTWO_TURN_TIMEOUT`, `TELEGRAM_BOT_TOKEN`, `ALLOWED_CHAT_IDS`.
+`OLLAMA_BASE_URL`, `CLAUDE_BIN`, `FORTYTWO_TURN_TIMEOUT`, `TELEGRAM_BOT_TOKEN`, `ALLOWED_CHAT_IDS`,
+`FORTYTWO_ROOT`, `TELEGRAM_BINDINGS_DB`.
 
 ## Code conventions
 
@@ -88,7 +90,10 @@ Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js
   `invokedAsBin()` is true (realpath of argv[1] equals the module), so importing never opens a DB.
   Keep the `#!/usr/bin/env node` shebang and the top-level `await` inside that guard.
 - `@justfortytwo/telegram` is an **optional peer** and is imported lazily; the scheduler must keep
-  working without it installed. Only the first id in `ALLOWED_CHAT_IDS` is used as the push target.
+  working without it installed. Push targets: the first id in `ALLOWED_CHAT_IDS` when set; otherwise
+  every paired private chat, read from the bridge's bindings db (`bindingsDbPath`) on each notification,
+  so pairing/unbinding needs no restart. The bindings db is opened only when `ALLOWED_CHAT_IDS` is empty.
+  Push failures are logged to stderr per chat.
 - Without `EMBED_MODEL`, a `FakeEmbedder` is used, so scheduler journal entries are not semantically
   searchable.
 - `recurrenceNext` throws on a cron with no next run, and `tick` calls it outside the per-job
