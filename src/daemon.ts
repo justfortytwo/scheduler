@@ -21,7 +21,7 @@ import {
   countPendingApprovals,
   type Embedder,
 } from '@justfortytwo/memory';
-import { createRunner } from '@justfortytwo/runner';
+import { claudeArgsFromEnv, createRunner } from '@justfortytwo/runner';
 import { tick, type TickDeps } from './tick.js';
 import { heartbeatPath, writeHeartbeat } from './heartbeat.js';
 import { createJournalNotifier, createFanoutNotifier } from './notifier.js';
@@ -187,7 +187,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   // Build the real handler registry (or accept the injected one for tests).
   const transcript = opts.registry ? undefined : await loadTranscriptSource(h);
   const registry: Registry = opts.registry ?? (() => {
-    const runner = createRunner();
+    // Operator arguments (FORTYTWO_CLAUDE_ARGS) apply to scheduled runs like they do to chat.
+    // The Oneiros worker builds its own locked-down runner and never receives them.
+    const runner = createRunner({ args: claudeArgsFromEnv() });
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
     const skills = skillDirs(root, process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'));
     return buildRegistry({

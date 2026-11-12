@@ -79,6 +79,7 @@ Then: `systemctl enable --now fortytwo-scheduler`
 | `EMBED_MODEL` | recommended | Ollama model name for semantic embeddings (falls back to FakeEmbedder) |
 | `OLLAMA_BASE_URL` | no | Ollama API base URL (default: `http://localhost:11434`) |
 | `CLAUDE_BIN` | no | Path to the `claude` CLI binary the runner spawns (default: `claude` on `PATH`) |
+| `FORTYTWO_CLAUDE_ARGS` | no | Extra arguments for every `claude` run, as a JSON array of strings (e.g. `["--chrome"]`). Set by `fortytwo start -- <args>`. Applies to scheduled runs, not to the Oneiros worker. A malformed value stops the daemon at boot. |
 | `FORTYTWO_TURN_TIMEOUT` | no | Per-turn timeout in seconds for a spawned `claude` run (default: `300`) |
 | `TELEGRAM_BOT_TOKEN` | optional | Telegram bot token — enables push notifications to Telegram |
 | `ALLOWED_CHAT_IDS` | optional | Comma-separated Telegram chat IDs; when set, notifications go to the **first** id. When unset, they go to every chat paired with `fortytwo pair` |
