@@ -42,3 +42,32 @@ export function seedRecurring(
     // else: unchanged — leave the existing row as-is
   }
 }
+
+// Minimal injected store surface for retiring rows (testable with a fake).
+export interface RetireStore {
+  listActive(): Array<{ id: number; kind: string; recurrence: string | null }>;
+  /** Marks the job done WITHOUT rescheduling it. */
+  complete(id: number): void;
+}
+
+/**
+ * Retires the active recurring rows of the given kinds, so a built-in job the
+ * owner switched off stops firing. `seedRecurring` only ever inserts or
+ * updates, so without this a disabled job's existing row would keep running.
+ *
+ * Only rows with a recurrence are touched: a one-off job that happens to share
+ * a kind is left alone. Re-enabling the kind later makes `seedRecurring`
+ * insert a fresh row on the next boot.
+ *
+ * @returns the ids that were retired.
+ */
+export function retireRecurring(store: RetireStore, kinds: string[]): number[] {
+  const retired: number[] = [];
+  for (const job of store.listActive()) {
+    if (job.recurrence != null && kinds.includes(job.kind)) {
+      store.complete(job.id);
+      retired.push(job.id);
+    }
+  }
+  return retired;
+}

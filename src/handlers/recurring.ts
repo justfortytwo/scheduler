@@ -11,7 +11,11 @@ export interface RunnerFn {
  */
 export function makeRecurringHandler(opts: {
   kind: string;
-  trigger: string;
+  /**
+   * Prompt for the run. A function is evaluated on every run, so the prompt can
+   * follow the install's current state (e.g. a skill added after boot).
+   */
+  trigger: string | (() => string);
   runner: RunnerFn;
   hasWork?: () => Promise<boolean>;
 }): Handler {
@@ -22,7 +26,7 @@ export function makeRecurringHandler(opts: {
       return opts.hasWork();
     },
     async run(_ctx: RunCtx): Promise<RunResult | null> {
-      const r = await opts.runner(opts.trigger);
+      const r = await opts.runner(typeof opts.trigger === 'function' ? opts.trigger() : opts.trigger);
       return { ok: r.ok, text: r.text };
     },
   };

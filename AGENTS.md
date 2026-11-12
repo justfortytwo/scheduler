@@ -18,12 +18,14 @@ src/
   registry.ts       createRegistry(): kind -> Handler map; throws on duplicate kind
   tick.ts           tick(): pure, fully injected drain loop; backoffAt / RETRY_BACKOFF_MIN
   daemon.ts         startDaemon(): DB open + migrations, stale requeue, seeding, 30s poll, PQueue(1)
-  seed.ts           seedRecurring(): idempotent upsert of recurring rows from RECURRING_DEFS
+  seed.ts           seedRecurring(): idempotent upsert of recurring rows; retireRecurring(): completes rows of disabled kinds
+  schedules.ts      .fortytwo/schedules.json: which built-in jobs are enabled (read/write/parse)
+  skills.ts         skillDirs() / skillInstalled(): is a Claude Code skill present on disk
   notifier.ts       Journal notifier + fanout notifier (per-notifier errors swallowed)
   telegram-push.ts  Telegram push targets (ALLOWED_CHAT_IDS or paired chats) + push notifier; no telegram import
   heartbeat.ts      heartbeatPath() / writeHeartbeat() (best-effort, never throws)
   handlers/
-    index.ts        RECURRING_DEFS (cron + trigger prompt) and buildRegistry()
+    index.ts        RECURRING_DEFS (cron, trigger, description, optional skill + fallback), triggerFor(), buildRegistry()
     recurring.ts    makeRecurringHandler() with optional hasWork gate
     oneoff.ts       notify_pending, reply, reminder handlers (payload.text / payload.id)
     reembed.ts      reembed_memory handler (no LLM, returns null = no notification)
@@ -46,7 +48,7 @@ From `package.json` (Node >= 20, npm, lockfile present):
 Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js`
 (or `npx fortytwo-scheduler`). See README for the env table: `DB_PATH`, `EMBED_MODEL`,
 `OLLAMA_BASE_URL`, `CLAUDE_BIN`, `FORTYTWO_TURN_TIMEOUT`, `TELEGRAM_BOT_TOKEN`, `ALLOWED_CHAT_IDS`,
-`FORTYTWO_ROOT`, `TELEGRAM_BINDINGS_DB`.
+`FORTYTWO_ROOT`, `TELEGRAM_BINDINGS_DB`, `CLAUDE_CONFIG_DIR`.
 
 ## Code conventions
 
@@ -73,6 +75,15 @@ Run the daemon after building: `DB_PATH=/abs/path/fortytwo.db node dist/index.js
 - **Recurring jobs are code-authoritative**: `RECURRING_DEFS` (`daily_briefing`, `sweep`,
   `learn_review`) are seeded on every boot; a changed cron updates the existing row. Crons are
   evaluated in **UTC** (`recurrenceNext` uses croner with `timezone: 'UTC'`).
+- **The owner chooses which built-in jobs run**: `<root>/.fortytwo/schedules.json` (written by
+  `fortytwo init` through `writeSchedules`) is read once at boot, before the DB is opened. Disabled
+  kinds are retired (`retireRecurring` completes their active recurring row) and not seeded. Missing
+  file or unlisted kind = enabled; an unparseable file makes `startDaemon` reject (never "all on").
+  `root` is `DaemonOptions.root`, else `FORTYTWO_ROOT`, else cwd.
+- **Skill-aware triggers**: `daily_briefing` and `learn_review` name a skill that ships in `persona`
+  and is copied into `<root>/.claude/skills` by the installer. `triggerFor` picks `trigger` when
+  `skillInstalled` finds `<name>/SKILL.md` (project or `CLAUDE_CONFIG_DIR`), else the def's
+  self-contained `fallback`; it is evaluated on every run. Keep both prompts in step with the skill.
 - Gates: `sweep` runs only if pending approvals > 0; `learn_review` only if memories in the last
   7 days > 0 (memory rows only; journal entries now live in the transcript, so it fires less often) (window computed per call, not at boot); `daily_briefing` is ungated.
 - **Notifications**: journal notifier appends to the `ConversationLog` (`src/conversation-log.ts`, channel `scheduler`, notification kind in `kind`;

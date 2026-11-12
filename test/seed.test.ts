@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { seedRecurring, type SeedStore } from '../src/seed.js';
+import { retireRecurring, seedRecurring, type SeedStore } from '../src/seed.js';
 import { RECURRING_DEFS } from '../src/handlers/index.js';
 
 const NOW = '2026-06-30T09:00:00.000Z';
@@ -84,5 +84,33 @@ describe('seedRecurring', () => {
     seedRecurring(store, newDef, NOW, fakeNext);
     expect(store.enqueueArgs).toHaveLength(1);
     expect(store.enqueueArgs[0]!.recurrence).toBe('3 13,18 * * *');
+  });
+});
+
+describe('retireRecurring', () => {
+  function makeRetireStore(rows: Array<{ id: number; kind: string; recurrence: string | null }>) {
+    const completed: number[] = [];
+    return { completed, listActive: () => rows, complete: (id: number) => { completed.push(id); } };
+  }
+
+  it('completes the active recurring rows of the given kinds and returns their ids', () => {
+    const store = makeRetireStore([
+      { id: 1, kind: 'daily_briefing', recurrence: '57 7 * * *' },
+      { id: 2, kind: 'sweep', recurrence: '3 13,18 * * *' },
+    ]);
+    expect(retireRecurring(store, ['daily_briefing'])).toEqual([1]);
+    expect(store.completed).toEqual([1]);
+  });
+
+  it('leaves a one-off job of the same kind alone', () => {
+    const store = makeRetireStore([{ id: 7, kind: 'daily_briefing', recurrence: null }]);
+    expect(retireRecurring(store, ['daily_briefing'])).toEqual([]);
+    expect(store.completed).toEqual([]);
+  });
+
+  it('does nothing when no kind is disabled', () => {
+    const store = makeRetireStore([{ id: 1, kind: 'daily_briefing', recurrence: '57 7 * * *' }]);
+    expect(retireRecurring(store, [])).toEqual([]);
+    expect(store.completed).toEqual([]);
   });
 });

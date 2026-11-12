@@ -82,8 +82,39 @@ Then: `systemctl enable --now fortytwo-scheduler`
 | `FORTYTWO_TURN_TIMEOUT` | no | Per-turn timeout in seconds for a spawned `claude` run (default: `300`) |
 | `TELEGRAM_BOT_TOKEN` | optional | Telegram bot token — enables push notifications to Telegram |
 | `ALLOWED_CHAT_IDS` | optional | Comma-separated Telegram chat IDs; when set, notifications go to the **first** id. When unset, they go to every chat paired with `fortytwo pair` |
-| `FORTYTWO_ROOT` | no | Project root used to find the Telegram bindings db (default: the working directory) |
+| `FORTYTWO_ROOT` | no | Project root: holds `.fortytwo/schedules.json`, `.claude/skills` and the Telegram bindings db (default: the working directory) |
+| `CLAUDE_CONFIG_DIR` | no | Claude Code config dir, checked for user-level skills (default: `~/.claude`) |
 | `TELEGRAM_BINDINGS_DB` | no | Bindings db path, relative to the root (default: `state/telegram-bindings.db`); must match the bridge |
+
+### Built-in schedules
+
+Three recurring jobs are built in. Each can be switched on or off per install.
+
+| kind | when (UTC) | runs only if | skill |
+|------|-----------|--------------|-------|
+| `daily_briefing` | 07:57 daily | always | `daily-briefing` |
+| `sweep` | 13:03 and 18:03 daily | approvals are pending | none |
+| `learn_review` | Sundays 09:17 | memories were stored in the last 7 days | `learn-review` |
+
+**Choosing which run.** `fortytwo init` asks about each one (or takes
+`--schedules all|none|<kind,kind>`) and writes `<FORTYTWO_ROOT>/.fortytwo/schedules.json`:
+
+```json
+{ "version": 1, "schedules": { "daily_briefing": { "enabled": false } } }
+```
+
+The daemon reads the file once at boot: a job that is off is not seeded and its
+existing row is retired; switching it back on seeds it again. A kind that is not
+listed is on, and so is every kind when the file is missing. A file that cannot
+be parsed stops the daemon with an error instead of running everything. Restart
+the daemon after changing the file.
+
+**Skills.** The two skills ship in `@justfortytwo/persona` and the installer
+copies them into `<FORTYTWO_ROOT>/.claude/skills/`. On every run the job checks
+for `<name>/SKILL.md` there and in `$CLAUDE_CONFIG_DIR/skills` (default
+`~/.claude/skills`). With the skill it sends a short "run the skill" prompt;
+without it, a self-contained prompt that states the task and its limits, so a
+standalone daemon still produces a sensible result.
 
 ### Liveness / `fortytwo doctor`
 

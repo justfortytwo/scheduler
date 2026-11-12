@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { loadTranscriptSource, makeOneirosHandler, oneirosEnabled, seedOneiros } from './oneiros.js';
 import { loadConversationLog, type ConversationLog } from './conversation-log.js';
 import { Cron } from 'croner';
@@ -25,7 +26,9 @@ import { tick, type TickDeps } from './tick.js';
 import { heartbeatPath, writeHeartbeat } from './heartbeat.js';
 import { createJournalNotifier, createFanoutNotifier } from './notifier.js';
 import { buildRegistry, RECURRING_DEFS } from './handlers/index.js';
-import { seedRecurring } from './seed.js';
+import { retireRecurring, seedRecurring } from './seed.js';
+import { isScheduleEnabled, readSchedules } from './schedules.js';
+import { skillDirs, skillInstalled } from './skills.js';
 import type { Notifier, Registry } from './types.js';
 
 /** Poll interval: how often `tick` is invoked to drain due jobs. */
@@ -128,6 +131,11 @@ export interface DaemonOptions {
    * these in. Defaults to [] so only the journal notifier is active.
    */
   extraNotifiers?: Notifier[];
+  /**
+   * Project root: where `.fortytwo/schedules.json` and `.claude/skills` live.
+   * Defaults to `FORTYTWO_ROOT`, else the working directory.
+   */
+  root?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +159,11 @@ export interface DaemonOptions {
  * @returns A dispose fn that clears the poll interval.
  */
 export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
+  const root = resolve(opts.root ?? process.env['FORTYTWO_ROOT'] ?? process.cwd());
+  // Read the owner's schedule choice BEFORE touching the DB: an unreadable file
+  // must stop the boot, not fall back to running everything.
+  const schedules = readSchedules(root);
+
   const h = openDb(opts.dbPath);
   await runMigrations(h.k);
 
@@ -176,9 +189,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   const registry: Registry = opts.registry ?? (() => {
     const runner = createRunner();
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
+    const skills = skillDirs(root, process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'));
     return buildRegistry({
       runner: async (prompt) => runner.run({ prompt }),
-      oneiros: oneirosEnabled(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd())) ? makeOneirosHandler(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd()), h, undefined, transcript) : undefined,
+      hasSkill: (name) => skillInstalled(name, skills),
+      oneiros: oneirosEnabled(root) ? makeOneirosHandler(root, h, undefined, transcript) : undefined,
       countPendingApprovals: () => countPendingApprovals(h),
       // Compute the 7-day lookback per call so a long-running daemon's window
       // does not drift forward from the boot-time instant.
@@ -188,19 +203,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     });
   })();
 
-  // Seed recurring job rows from the in-code definitions (idempotent on every boot).
+  // Built-in jobs follow the owner's choice in .fortytwo/schedules.json: retire
+  // the rows of the ones switched off, then seed the enabled ones from the
+  // in-code definitions (both idempotent on every boot).
+  const enabledDefs = RECURRING_DEFS.filter((d) => isScheduleEnabled(schedules, d.kind));
+  const disabledKinds = RECURRING_DEFS.filter((d) => !isScheduleEnabled(schedules, d.kind)).map((d) => d.kind);
+  retireRecurring(
+    { listActive: () => listActive(h), complete: (id) => complete(h, id) },
+    disabledKinds,
+  );
   seedRecurring(
     {
       listActive: () => listActive(h),
       enqueue: (j) => enqueue(h, j),
       setRecurrence: (id, rec, at) => setRecurrence(h, id, rec, at),
     },
-    RECURRING_DEFS,
+    enabledDefs,
     new Date().toISOString(),
     recurrenceNext,
   );
 
-  if (oneirosEnabled(resolve(process.env['FORTYTWO_ROOT'] ?? process.cwd()))) seedOneiros(h, new Date().toISOString(), recurrenceNext);
+  if (oneirosEnabled(root)) seedOneiros(h, new Date().toISOString(), recurrenceNext);
 
   // Write liveness heartbeat on boot.
   const hbPath = heartbeatPath(opts.dbPath);
