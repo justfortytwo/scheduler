@@ -107,7 +107,8 @@ The daemon reads the file once at boot: a job that is off is not seeded and its
 existing row is retired; switching it back on seeds it again. A kind that is not
 listed is on, and so is every kind when the file is missing. A file that cannot
 be parsed stops the daemon with an error instead of running everything. Restart
-the daemon after changing the file.
+the daemon after changing the file. On an existing install, change the choice with
+`fortytwo schedules` (it touches only this file).
 
 **Skills.** The two skills ship in `@justfortytwo/persona` and the installer
 copies them into `<FORTYTWO_ROOT>/.claude/skills/`. On every run the job checks
