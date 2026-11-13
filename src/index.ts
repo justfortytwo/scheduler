@@ -121,3 +121,4 @@ export { loadTranscriptSource } from './oneiros.js';
 export { loadConversationLog, noopConversationLog } from './conversation-log.js';
 export type { ConversationEvent, ConversationLog } from './conversation-log.js';
 export { makeJournalWrite } from './daemon.js';
+export { heldCall, heldNotice, reportingHeld, type HeldCall } from './held.js';

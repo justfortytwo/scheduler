@@ -132,6 +132,15 @@ for `<name>/SKILL.md` there and in `$CLAUDE_CONFIG_DIR/skills` (default
 without it, a self-contained prompt that states the task and its limits, so a
 standalone daemon still produces a sensible result.
 
+**With the safety gate on.** A scheduled run has nobody waiting to approve a
+held action. When the gate (`@justfortytwo/gate`) holds a tool call, the run
+ends there and is not resumed. The job then reports that instead of a result:
+which job stopped and the exact action that was held (a Bash command is shown
+as written). It stops at the same point on the next run until that action is
+allowed in the gate's policy (`.claude/policy/capabilities.toml`, or
+`rules/bash-allowlist.jsonl` for Bash commands). Oneiros runs in its own
+locked-down worker and does not send this notice.
+
 ### Liveness / `fortytwo doctor`
 
 On boot and on every 30-second poll tick — even while a previous tick is still in flight — the daemon writes a heartbeat file at `$(dirname $DB_PATH)/scheduler.heartbeat` containing `{ "pid": <number>, "ts": "<ISO>" }`. The write is outside the poll's overlap guard so a long-running turn never starves it. `fortytwo doctor` reads this file and warns (non-fatal) if it is missing or older than 90 seconds.

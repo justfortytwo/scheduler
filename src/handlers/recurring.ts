@@ -1,7 +1,8 @@
 import type { Handler, RunCtx, RunResult } from '../types.js';
 
 export interface RunnerFn {
-  (prompt: string): Promise<{ ok: boolean; text: string }>;
+  /** `raw` is the parsed `claude -p` result, when the caller has it (see ../held.ts). */
+  (prompt: string): Promise<{ ok: boolean; text: string; raw?: unknown }>;
 }
 
 /**

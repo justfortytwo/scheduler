@@ -5,6 +5,7 @@ import type { ReembedOneFn } from './reembed.js';
 import { makeRecurringHandler } from './recurring.js';
 import { makeNotifyPendingHandler, makeReplyHandler, makeReminderHandler } from './oneoff.js';
 import { makeReembedHandler } from './reembed.js';
+import { reportingHeld } from '../held.js';
 
 // ---------------------------------------------------------------------------
 // Recurring job definitions (code-authoritative cron schedule + trigger text)
@@ -118,7 +119,9 @@ export interface RegistryDeps {
 }
 
 export function buildRegistry(deps: RegistryDeps): Registry {
-  const { runner, countPendingApprovals, recentCount, reembedOne } = deps;
+  const { countPendingApprovals, recentCount, reembedOne } = deps;
+  // A run the safety gate stopped for an approval reports that instead of ending in silence.
+  const runner = (kind: string): RunnerFn => reportingHeld(kind, deps.runner);
   const hasSkill = deps.hasSkill ?? (() => true);
   const trigger = (kind: string) => (): string =>
     triggerFor(RECURRING_DEFS.find((d) => d.kind === kind)!, hasSkill);
@@ -129,14 +132,14 @@ export function buildRegistry(deps: RegistryDeps): Registry {
     makeRecurringHandler({
       kind: 'daily_briefing',
       trigger: trigger('daily_briefing'),
-      runner,
+      runner: runner('daily_briefing'),
     }),
 
     // --- Recurring: gated on pending approvals > 0 ---
     makeRecurringHandler({
       kind: 'sweep',
       trigger: trigger('sweep'),
-      runner,
+      runner: runner('sweep'),
       hasWork: async () => countPendingApprovals() > 0,
     }),
 
@@ -144,14 +147,14 @@ export function buildRegistry(deps: RegistryDeps): Registry {
     makeRecurringHandler({
       kind: 'learn_review',
       trigger: trigger('learn_review'),
-      runner,
+      runner: runner('learn_review'),
       hasWork: async () => (await recentCount()) > 0,
     }),
 
     // --- One-off: no gate ---
-    makeNotifyPendingHandler(runner),
-    makeReplyHandler(runner),
-    makeReminderHandler(runner),
+    makeNotifyPendingHandler(runner('notify_pending')),
+    makeReplyHandler(runner('reply')),
+    makeReminderHandler(runner('reminder')),
 
     // --- Maintenance: no LLM, no notification ---
     makeReembedHandler(reembedOne),
