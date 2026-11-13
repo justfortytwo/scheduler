@@ -42,9 +42,12 @@ export type { BoundChat } from './telegram-push.js';
 // Phase 8 re-exports.
 export { triggerFor } from './handlers/index.js';
 export type { BuiltinSchedule } from './handlers/index.js';
-export { retireRecurring } from './seed.js';
+export { realignRecurring, retireRecurring } from './seed.js';
 export type { RetireStore } from './seed.js';
-export { SCHEDULES_PATH, isScheduleEnabled, parseSchedules, readSchedules, writeSchedules } from './schedules.js';
+export {
+  SCHEDULES_PATH, isScheduleEnabled, isValidTimezone, parseScheduleTimezone, parseSchedules,
+  readScheduleTimezone, readSchedules, writeScheduleTimezone, writeSchedules,
+} from './schedules.js';
 export type { SchedulesConfig } from './schedules.js';
 export { skillDirs, skillInstalled } from './skills.js';
 

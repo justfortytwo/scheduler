@@ -43,6 +43,44 @@ export function seedRecurring(
   }
 }
 
+// Minimal injected store surface for realigning rows (testable with a fake).
+export interface RealignStore {
+  listActive(): Array<{ id: number; kind: string; recurrence: string | null; status: string; run_at: string; attempts: number }>;
+  setRecurrence(id: number, recurrence: string, runAt: string): void;
+}
+
+/**
+ * Moves the next run of built-in recurring jobs onto the schedule as it reads
+ * NOW, so a changed time zone applies on the next boot instead of after one
+ * more run at the old time.
+ *
+ * Only a row that is waiting for a future run is touched. A job that is
+ * overdue still runs (catch-up after downtime), a running one is left to
+ * finish, and one waiting out a retry backoff (attempts > 0) keeps its retry
+ * time.
+ *
+ * @returns the ids that were moved.
+ */
+export function realignRecurring(
+  store: RealignStore,
+  defs: RecurringDef[],
+  now: string,
+  recurrenceNext: (cron: string, now: string) => string,
+): number[] {
+  const moved: number[] = [];
+  for (const job of store.listActive()) {
+    const def = defs.find((d) => d.kind === job.kind);
+    if (!def || job.recurrence !== def.cron) continue;
+    if (job.status !== 'pending' || job.attempts > 0 || job.run_at <= now) continue;
+    const expected = recurrenceNext(def.cron, now);
+    if (expected !== job.run_at) {
+      store.setRecurrence(job.id, def.cron, expected);
+      moved.push(job.id);
+    }
+  }
+  return moved;
+}
+
 // Minimal injected store surface for retiring rows (testable with a fake).
 export interface RetireStore {
   listActive(): Array<{ id: number; kind: string; recurrence: string | null }>;

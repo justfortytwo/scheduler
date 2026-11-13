@@ -6,7 +6,7 @@ import { openDb, runMigrations, listActive } from '@justfortytwo/memory';
 import { RECURRING_DEFS, buildRegistry, triggerFor } from '../src/handlers/index.js';
 import { startDaemon } from '../src/daemon.js';
 import { createRegistry } from '../src/registry.js';
-import { writeSchedules, SCHEDULES_PATH } from '../src/schedules.js';
+import { writeSchedules, writeScheduleTimezone, SCHEDULES_PATH } from '../src/schedules.js';
 
 const def = (kind: string) => RECURRING_DEFS.find((d) => d.kind === kind)!;
 const ctx = { now: '2026-06-30T09:00:00.000Z', payload: undefined };
@@ -104,6 +104,25 @@ describe('startDaemon — .fortytwo/schedules.json', () => {
       h.raw.close();
     }
   }
+
+  it('moves the waiting runs when the time zone changes between boots', async () => {
+    const dbPath = join(root, 'tz.db');
+    const briefingRunAt = async (): Promise<string> => {
+      const h = openDb(dbPath);
+      try { return listActive(h).find((j) => j.kind === 'daily_briefing')!.run_at; }
+      finally { await h.k.destroy(); h.raw.close(); }
+    };
+    (await startDaemon({ dbPath, root, registry: emptyRegistry }))();
+    const utc = await briefingRunAt();
+    expect(utc).toMatch(/T07:57:00\.000Z$/);
+
+    writeScheduleTimezone(root, 'Asia/Tokyo'); // UTC+9, no daylight saving
+    (await startDaemon({ dbPath, root, registry: emptyRegistry }))();
+    expect(await briefingRunAt()).toMatch(/T22:57:00\.000Z$/); // 07:57 in Tokyo
+
+    (await startDaemon({ dbPath, root, registry: emptyRegistry }))(); // idempotent
+    expect(await briefingRunAt()).toMatch(/T22:57:00\.000Z$/);
+  });
 
   it('seeds every built-in job when the file is missing', async () => {
     const dbPath = join(root, 'a.db');

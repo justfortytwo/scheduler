@@ -5,6 +5,13 @@ import { recurrenceNext, makePoll } from '../src/daemon.js';
 // recurrenceNext
 // ---------------------------------------------------------------------------
 describe('recurrenceNext', () => {
+  it('reads the cron in the given time zone, across daylight saving', () => {
+    // 07:57 in Rome is 06:57 UTC in winter (UTC+1) and 05:57 UTC in summer (UTC+2).
+    expect(recurrenceNext('57 7 * * *', '2026-11-13T00:00:00.000Z', 'Europe/Rome')).toBe('2026-11-13T06:57:00.000Z');
+    expect(recurrenceNext('57 7 * * *', '2026-07-01T00:00:00.000Z', 'Europe/Rome')).toBe('2026-07-01T05:57:00.000Z');
+    expect(recurrenceNext('57 7 * * *', '2026-11-13T00:00:00.000Z')).toBe('2026-11-13T07:57:00.000Z');
+  });
+
   it('returns the next ISO run time for a daily cron', () => {
     // At midnight UTC on 2026-06-29, "0 13 * * *" next fires at 13:00 same day.
     const result = recurrenceNext('0 13 * * *', '2026-06-29T00:00:00.000Z');

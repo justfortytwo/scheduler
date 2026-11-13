@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { retireRecurring, seedRecurring, type SeedStore } from '../src/seed.js';
+import { realignRecurring, retireRecurring, seedRecurring, type SeedStore } from '../src/seed.js';
 import { RECURRING_DEFS } from '../src/handlers/index.js';
 
 const NOW = '2026-06-30T09:00:00.000Z';
@@ -112,5 +112,41 @@ describe('retireRecurring', () => {
     const store = makeRetireStore([{ id: 1, kind: 'daily_briefing', recurrence: '57 7 * * *' }]);
     expect(retireRecurring(store, [])).toEqual([]);
     expect(store.completed).toEqual([]);
+  });
+});
+
+describe('realignRecurring', () => {
+  const NOW = '2026-11-13T02:00:00.000Z';
+  const def = RECURRING_DEFS.find((d) => d.kind === 'daily_briefing')!;
+  const next = () => '2026-11-13T06:57:00.000Z'; // 07:57 in a UTC+1 zone
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 1, kind: def.kind, recurrence: def.cron, status: 'pending', run_at: '2026-11-13T07:57:00.000Z', attempts: 0, ...over,
+  });
+  const run = (rows: ReturnType<typeof row>[]) => {
+    const setRecurrence = vi.fn();
+    const moved = realignRecurring({ listActive: () => rows, setRecurrence }, [def], NOW, next);
+    return { moved, setRecurrence };
+  };
+
+  it('moves a waiting run onto the schedule as it reads now', () => {
+    const { moved, setRecurrence } = run([row()]);
+    expect(moved).toEqual([1]);
+    expect(setRecurrence).toHaveBeenCalledWith(1, def.cron, '2026-11-13T06:57:00.000Z');
+  });
+
+  it('leaves a run that is already on schedule', () => {
+    expect(run([row({ run_at: '2026-11-13T06:57:00.000Z' })]).moved).toEqual([]);
+  });
+
+  it('never touches an overdue, running or retrying job, another kind, or a one-off', () => {
+    const { moved } = run([
+      row({ id: 2, run_at: '2026-11-13T01:57:00.000Z' }),     // overdue: must still run
+      row({ id: 3, status: 'running' }),
+      row({ id: 4, attempts: 1, run_at: '2026-11-13T02:05:00.000Z' }), // retry backoff
+      row({ id: 5, kind: 'reminder' }),
+      row({ id: 6, recurrence: null }),
+      row({ id: 7, recurrence: '0 0 * * *' }),                // not the built-in cron
+    ]);
+    expect(moved).toEqual([]);
   });
 });

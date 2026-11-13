@@ -12,7 +12,7 @@ import { makeReembedHandler } from './reembed.js';
 
 export interface RecurringDef {
   kind: string;
-  /** UTC cron expression (croner format). */
+  /** Cron expression (croner format), read in the install's time zone (UTC unless one is set). */
   cron: string;
   /** Prompt sent to the runner when the job fires and hasWork is true. */
   trigger: string;
@@ -51,7 +51,7 @@ export const RECURRING_DEFS: BuiltinSchedule[] = [
   {
     kind: 'daily_briefing',
     cron: '57 7 * * *',
-    description: 'Daily briefing: a morning rundown of what needs you today (07:57 UTC)',
+    description: 'Daily briefing: a morning rundown of what needs you today (07:57)',
     trigger: 'Run the daily-briefing skill and send me the rundown for today.',
     skill: {
       name: 'daily-briefing',
@@ -65,13 +65,13 @@ export const RECURRING_DEFS: BuiltinSchedule[] = [
   {
     kind: 'sweep',
     cron: '3 13,18 * * *',
-    description: 'Open-thread sweep: a one-line status, only when approvals are pending (13:03 and 18:03 UTC)',
+    description: 'Open-thread sweep: a one-line status, only when approvals are pending (13:03 and 18:03)',
     trigger: 'Open-thread sweep: check pending approvals and threads awaiting a reply; give me a one-line status.',
   },
   {
     kind: 'learn_review',
     cron: '17 9 * * 0',
-    description: 'Weekly learn-review: proposes rules and cleanups from the last 7 days (Sundays 09:17 UTC)',
+    description: 'Weekly learn-review: proposes rules and cleanups from the last 7 days (Sundays 09:17)',
     trigger: 'Run the learn-review skill for the last 7 days. Propose only: nothing is installed or approved.',
     skill: {
       name: 'learn-review',

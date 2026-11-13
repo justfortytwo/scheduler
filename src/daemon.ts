@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { loadTranscriptSource, makeOneirosHandler, oneirosEnabled, seedOneiros } from './oneiros.js';
+import { ONEIROS_DEF, loadTranscriptSource, makeOneirosHandler, oneirosEnabled, seedOneiros } from './oneiros.js';
 import { loadConversationLog, type ConversationLog } from './conversation-log.js';
 import { Cron } from 'croner';
 import PQueue from 'p-queue';
@@ -26,8 +26,8 @@ import { tick, type TickDeps } from './tick.js';
 import { heartbeatPath, writeHeartbeat } from './heartbeat.js';
 import { createJournalNotifier, createFanoutNotifier } from './notifier.js';
 import { buildRegistry, RECURRING_DEFS } from './handlers/index.js';
-import { retireRecurring, seedRecurring } from './seed.js';
-import { isScheduleEnabled, readSchedules } from './schedules.js';
+import { realignRecurring, retireRecurring, seedRecurring } from './seed.js';
+import { isScheduleEnabled, readScheduleTimezone, readSchedules } from './schedules.js';
 import { skillDirs, skillInstalled } from './skills.js';
 import type { Notifier, Registry } from './types.js';
 
@@ -53,10 +53,10 @@ export const STALE_RUNNING_MS = 15 * 60_000; // 15 minutes
  * If `new Cron` throws on a malformed expression, that is acceptable — it is
  * the seed step's responsibility to validate cron strings before persisting them.
  */
-export function recurrenceNext(cron: string, now: string): string {
-  // timezone: 'UTC' ensures cron expressions are always interpreted in UTC,
-  // matching the ISO-string run_at values stored in the jobs table.
-  const next = new Cron(cron, { timezone: 'UTC' }).nextRun(new Date(now));
+export function recurrenceNext(cron: string, now: string, timezone = 'UTC'): string {
+  // The cron fields are read in `timezone` (UTC unless the install chose one);
+  // the result is always an absolute ISO instant, as stored in jobs.run_at.
+  const next = new Cron(cron, { timezone }).nextRun(new Date(now));
   if (!next) throw new Error(`recurrenceNext: no next run for cron '${cron}' after ${now}`);
   return next.toISOString();
 }
@@ -163,6 +163,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   // Read the owner's schedule choice BEFORE touching the DB: an unreadable file
   // must stop the boot, not fall back to running everything.
   const schedules = readSchedules(root);
+  // Built-in times are read in the install's time zone (UTC when none is set).
+  const timezone = readScheduleTimezone(root) ?? 'UTC';
+  const nextRun = (cron: string, now: string): string => recurrenceNext(cron, now, timezone);
 
   const h = openDb(opts.dbPath);
   await runMigrations(h.k);
@@ -222,10 +225,19 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     },
     enabledDefs,
     new Date().toISOString(),
-    recurrenceNext,
+    nextRun,
   );
 
-  if (oneirosEnabled(root)) seedOneiros(h, new Date().toISOString(), recurrenceNext);
+  if (oneirosEnabled(root)) seedOneiros(h, new Date().toISOString(), nextRun);
+
+  // A time zone changed since the last boot moves the waiting runs with it.
+  const moved = realignRecurring(
+    { listActive: () => listActive(h), setRecurrence: (id, rec, at) => setRecurrence(h, id, rec, at) },
+    [...enabledDefs, ...(oneirosEnabled(root) ? [ONEIROS_DEF] : [])],
+    new Date().toISOString(),
+    nextRun,
+  );
+  console.log(`[scheduler] built-in schedules in ${timezone}${moved.length > 0 ? ` (${moved.length} next run(s) moved)` : ''}`);
 
   // Write liveness heartbeat on boot.
   const hbPath = heartbeatPath(opts.dbPath);
@@ -238,7 +250,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     claimDue: (now) => claimDue(h, now),
     complete: (id, rescheduleOpts) => complete(h, id, rescheduleOpts),
     fail: (id, error, retryOpts) => fail(h, id, error, retryOpts),
-    recurrenceNext,
+    recurrenceNext: nextRun,
     enqueueRun: (fn) => queue.add(fn) as Promise<void>,
     notify: (notification) => fanout.notify(notification),
     registry,

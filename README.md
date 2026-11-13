@@ -91,8 +91,8 @@ Then: `systemctl enable --now fortytwo-scheduler`
 
 Three recurring jobs are built in. Each can be switched on or off per install.
 
-| kind | when (UTC) | runs only if | skill |
-|------|-----------|--------------|-------|
+| kind | when | runs only if | skill |
+|------|------|--------------|-------|
 | `daily_briefing` | 07:57 daily | always | `daily-briefing` |
 | `sweep` | 13:03 and 18:03 daily | approvals are pending | none |
 | `learn_review` | Sundays 09:17 | memories were stored in the last 7 days | `learn-review` |
@@ -111,6 +111,20 @@ be parsed stops the daemon with an error instead of running everything. Restart
 the daemon after changing the file. On an existing install, change the choice with
 `fortytwo schedules` (it touches only this file).
 
+**Time zone.** The times above are UTC unless the file names a zone:
+
+```json
+{ "version": 1, "timezone": "Europe/Rome", "schedules": {} }
+```
+
+With `timezone` set (an IANA name), 07:57 is 07:57 on that clock all year,
+across daylight saving. The Oneiros job (03:17) follows it too. `fortytwo init`
+writes the owner's zone on a new install; on an existing one set it with
+`fortytwo schedules --timezone <name>`. At boot, a waiting run that no longer
+matches the schedule is moved to the next correct time; an overdue run and a
+retry keep theirs. A value that is not a usable zone stops the daemon with an
+error instead of falling back to UTC.
+
 **Skills.** The two skills ship in `@justfortytwo/persona` and the installer
 copies them into `<FORTYTWO_ROOT>/.claude/skills/`. On every run the job checks
 for `<name>/SKILL.md` there and in `$CLAUDE_CONFIG_DIR/skills` (default
@@ -128,7 +142,7 @@ MIT © 2026 Enrico Deleo
 
 ## Oneiros maintenance
 
-`persona.oneiros` runs daily at `17 3 * * *` UTC, with null payload and the existing
+`persona.oneiros` runs daily at `17 3 * * *` (UTC, or the install's time zone when one is set), with null payload and the existing
 durable retry/claim mechanism. Installer seeds it after initializing persona's
 checkpoint; daemon boot reconciles the same job when the checkpoint exists.
 The cheap gate checks the memory head and, when the optional `@justfortytwo/transcript`

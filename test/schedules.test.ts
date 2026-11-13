@@ -5,8 +5,11 @@ import { join } from 'node:path';
 import {
   SCHEDULES_PATH,
   isScheduleEnabled,
+  isValidTimezone,
   parseSchedules,
+  readScheduleTimezone,
   readSchedules,
+  writeScheduleTimezone,
   writeSchedules,
 } from '../src/schedules.js';
 
@@ -68,5 +71,49 @@ describe('parseSchedules', () => {
 
   it('keeps kinds it does not know (the daemon ignores them)', () => {
     expect(parseSchedules('{"schedules":{"future_job":{"enabled":false}}}')).toEqual({ future_job: false });
+  });
+});
+
+describe('time zone', () => {
+  it('is undefined (UTC) when the file or the field is missing', () => {
+    expect(readScheduleTimezone(root)).toBeUndefined();
+    writeSchedules(root, { sweep: false });
+    expect(readScheduleTimezone(root)).toBeUndefined();
+  });
+
+  it('is saved beside the on/off choice, and each write keeps the other', () => {
+    writeSchedules(root, { sweep: false });
+    writeScheduleTimezone(root, 'Europe/Rome');
+    expect(readScheduleTimezone(root)).toBe('Europe/Rome');
+    expect(readSchedules(root)).toEqual({ sweep: false });
+
+    writeSchedules(root, { sweep: true, daily_briefing: false });
+    expect(readScheduleTimezone(root)).toBe('Europe/Rome');
+    expect(JSON.parse(readFileSync(join(root, SCHEDULES_PATH), 'utf8'))).toEqual({
+      version: 1, timezone: 'Europe/Rome',
+      schedules: { sweep: { enabled: true }, daily_briefing: { enabled: false } },
+    });
+
+    writeScheduleTimezone(root, undefined);
+    expect(readScheduleTimezone(root)).toBeUndefined();
+    expect(readSchedules(root)).toEqual({ sweep: true, daily_briefing: false });
+  });
+
+  it('can be saved before any choice exists', () => {
+    writeScheduleTimezone(root, 'America/New_York');
+    expect(readSchedules(root)).toEqual({});
+    expect(readScheduleTimezone(root)).toBe('America/New_York');
+  });
+
+  it('accepts IANA names and UTC, nothing else', () => {
+    for (const ok of ['UTC', 'Europe/Rome', 'America/Argentina/Buenos_Aires']) expect(isValidTimezone(ok), ok).toBe(true);
+    for (const bad of ['', '  ', 'Rome', 'Europe/Nowhere', 7, null, undefined]) expect(isValidTimezone(bad), String(bad)).toBe(false);
+    expect(() => writeScheduleTimezone(root, 'Rome')).toThrow(/not a time zone/);
+  });
+
+  it('refuses a file whose time zone cannot be used, instead of falling back to UTC', () => {
+    writeRaw('{"version":1,"timezone":"Rome","schedules":{}}');
+    expect(() => readScheduleTimezone(root)).toThrow(/timezone must be an IANA name/);
+    expect(() => readSchedules(root)).toThrow(/timezone must be an IANA name/);
   });
 });
