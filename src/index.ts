@@ -126,3 +126,10 @@ export { heldCall, heldNotice, reportingHeld, type HeldCall } from './held.js';
 // Approval outbox (memory#1): staged approvals are polled, notified, then stamped.
 export { createApprovalOutbox } from './approval-outbox.js';
 export type { ApprovalOutbox, ApprovalOutboxDeps } from './approval-outbox.js';
+
+// Phase 9 re-exports: the scheduler owns the jobs schema and the job API (scheduler#2).
+export {
+  enqueue, claimDue, complete, fail, listActive, requeueStale, existsPending, setRecurrence, MAX_ATTEMPTS,
+} from './jobs.js';
+export type { JobRow, NewJob } from './jobs.js';
+export { SCHEDULER_MIGRATIONS, runSchedulerMigrations } from './migrate.js';

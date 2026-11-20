@@ -7,23 +7,18 @@ import PQueue from 'p-queue';
 import {
   openDb,
   runMigrations,
-  claimDue,
-  complete,
-  fail,
-  requeueStale,
   FakeEmbedder,
   OllamaEmbedder,
   query,
   reembed,
-  listActive,
-  enqueue,
-  setRecurrence,
   countPendingApprovals,
   listUnnotifiedApprovals,
   markApprovalsNotified,
   type Embedder,
 } from '@justfortytwo/memory';
 import { claudeArgsFromEnv, createRunner } from '@justfortytwo/runner';
+import { claimDue, complete, enqueue, fail, listActive, requeueStale, setRecurrence } from './jobs.js';
+import { runSchedulerMigrations } from './migrate.js';
 import { tick, type TickDeps } from './tick.js';
 import { createApprovalOutbox } from './approval-outbox.js';
 import { heartbeatPath, writeHeartbeat } from './heartbeat.js';
@@ -173,6 +168,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
 
   const h = openDb(opts.dbPath);
   await runMigrations(h.k);
+  await runSchedulerMigrations(h.k);
 
   // Crash recovery: reset jobs stuck in 'running' for > 15 minutes.
   const staleThreshold = new Date(Date.now() - STALE_RUNNING_MS).toISOString();

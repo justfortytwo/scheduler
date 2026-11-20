@@ -2,7 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDb, runMigrations, listActive, GateApprovalStore, listUnnotifiedApprovals } from '@justfortytwo/memory';
+import { openDb, runMigrations, GateApprovalStore, listUnnotifiedApprovals } from '@justfortytwo/memory';
+import { listActive } from '../src/jobs.js';
+import { runSchedulerMigrations } from '../src/migrate.js';
 import { createApprovalOutbox, type ApprovalOutboxDeps } from '../src/approval-outbox.js';
 import { POLL_MS, startDaemon } from '../src/daemon.js';
 import { createRegistry } from '../src/registry.js';
@@ -125,6 +127,7 @@ describe('startDaemon — approval outbox', () => {
       const dbPath = join(dir, 'fortytwo.db');
       const h = openDb(dbPath);
       await runMigrations(h.k);
+      await runSchedulerMigrations(h.k);
       const approvals = new GateApprovalStore(h);
       const first = await approvals.addPending({ tool: 'bash', target: 'ls', payload: {}, tier: 'ask', tool_use_id: 'tu_1' });
       expect(listActive(h)).toEqual([]); // memory produced no job
