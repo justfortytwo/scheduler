@@ -1,4 +1,4 @@
-// Structural job-row shape (kept local; memory's JobRow is structurally compatible — wired in Phase 3).
+// Structural job-row shape (kept local; ./jobs.ts's JobRow is structurally compatible — wired in Phase 3).
 export interface Job {
   id: number;
   kind: string;

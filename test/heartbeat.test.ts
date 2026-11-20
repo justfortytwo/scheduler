@@ -2,7 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDb, runMigrations, enqueue } from '@justfortytwo/memory';
+import { openDb, runMigrations } from '@justfortytwo/memory';
+import { enqueue } from '../src/jobs.js';
+import { runSchedulerMigrations } from '../src/migrate.js';
 import { heartbeatPath, writeHeartbeat } from '../src/heartbeat.js';
 import { POLL_MS, startDaemon } from '../src/daemon.js';
 import { createRegistry } from '../src/registry.js';
@@ -74,6 +76,7 @@ describe('startDaemon — heartbeat refreshes during a long in-flight tick', () 
       // in-flight forever, so the overlap guard skips every subsequent poll.
       const h = openDb(dbPath);
       await runMigrations(h.k);
+      await runSchedulerMigrations(h.k);
       enqueue(h, { kind: 'blocking_job', run_at: '2020-01-01T00:00:00.000Z' });
 
       const registry = createRegistry([

@@ -7,7 +7,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDb, runMigrations, enqueue } from '@justfortytwo/memory';
+import { openDb, runMigrations } from '@justfortytwo/memory';
+import { enqueue } from '../src/jobs.js';
+import { runSchedulerMigrations } from '../src/migrate.js';
 import { startDaemon, makePoll } from '../src/daemon.js';
 import { createRegistry } from '../src/registry.js';
 import type { Notifier } from '../src/types.js';
@@ -37,6 +39,7 @@ describe('startDaemon — extraNotifiers fanout', () => {
     // Seed the DB with a job due in the past.
     const h = openDb(dbPath);
     await runMigrations(h.k);
+    await runSchedulerMigrations(h.k);
     enqueue(h, { kind: 'test_job', run_at: '2020-01-01T00:00:00.000Z' });
 
     // Start daemon with the fake registry and extra notifier.
@@ -52,9 +55,8 @@ describe('startDaemon — extraNotifiers fanout', () => {
     const { tick } = await import('../src/tick.js');
     const { createJournalNotifier, createFanoutNotifier } = await import('../src/notifier.js');
     const { recurrenceNext } = await import('../src/daemon.js');
-    const {
-      claimDue, complete, fail, store, FakeEmbedder,
-    } = await import('@justfortytwo/memory');
+    const { store, FakeEmbedder } = await import('@justfortytwo/memory');
+    const { claimDue, complete, fail } = await import('../src/jobs.js');
 
     const journalReceived: Array<{ kind: string; text: string }> = [];
     const journalNotifier = createJournalNotifier(async (n) => { journalReceived.push(n); });
