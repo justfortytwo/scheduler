@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb, runMigrations, type DbHandles } from '@justfortytwo/memory';
 import { runSchedulerMigrations } from '../src/migrate.js';
-import { enqueue, claimDue, complete, fail, listActive, requeueStale, existsPending, setRecurrence } from '../src/jobs.js';
+import { enqueue, claimDue, complete, fail, listActive, requeueStale, existsPending, setRecurrence, cancel } from '../src/jobs.js';
 
 // Moved from @justfortytwo/memory (test/jobs.test.ts) with the job API (scheduler#2).
 
@@ -92,5 +92,30 @@ describe('setRecurrence', () => {
     setRecurrence(h, id, '3 13,18 * * *', '2026-06-30T18:03:00Z');
     const row = listActive(h).find((j) => j.id === id)!;
     expect(row.updated_at >= before).toBe(true);
+  });
+});
+
+describe('cancel (scheduler#1)', () => {
+  it('cancels a pending job: terminal, never claimed or requeued', () => {
+    const id = enqueue(h, { kind: 'reminder', run_at: '2020-01-01T00:00:00Z' });
+    expect(cancel(h, id)).toEqual({ ok: true });
+    expect(listActive(h)).toEqual([]);
+    requeueStale(h, '2999-01-01T00:00:00Z');
+    expect(claimDue(h, '2999-01-01T00:00:00Z')).toEqual([]);
+    expect(cancel(h, id)).toEqual({ ok: false, reason: 'not_active', status: 'cancelled', kind: 'reminder' });
+  });
+
+  it('refuses a running job and leaves it running', () => {
+    const id = enqueue(h, { kind: 'reminder', run_at: '2020-01-01T00:00:00Z' });
+    claimDue(h, '2026-06-29T00:00:00Z');
+    expect(cancel(h, id)).toEqual({ ok: false, reason: 'running', status: 'running', kind: 'reminder' });
+    expect(listActive(h)[0]!.status).toBe('running');
+  });
+
+  it('with kinds, refuses other kinds and reports unknown ids', () => {
+    const id = enqueue(h, { kind: 'sweep', run_at: '2999-01-01T00:00:00Z', recurrence: '0 13 * * *' });
+    expect(cancel(h, id, { kinds: ['reminder'] })).toEqual({ ok: false, reason: 'kind_not_allowed', status: 'pending', kind: 'sweep' });
+    expect(listActive(h)[0]!.status).toBe('pending');
+    expect(cancel(h, 424242)).toEqual({ ok: false, reason: 'not_found' });
   });
 });

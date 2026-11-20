@@ -104,3 +104,35 @@ export function setRecurrence(h: DbHandles, id: number, recurrence: string, runA
     `UPDATE jobs SET recurrence=?, run_at=?, updated_at=? WHERE id=?`,
   ).run(recurrence, runAt, ts, id);
 }
+
+/** Why `cancel` left a job alone; `status`/`kind` describe the row when one exists. */
+export type CancelResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'running' | 'not_active' | 'kind_not_allowed'; status: string; kind: string };
+
+/**
+ * Cancel a pending job: its status becomes `cancelled`, a terminal state that
+ * `claimDue`, `listActive` and `requeueStale` never pick up again.
+ *
+ * Only `pending` rows are cancelled. A `running` job is refused (its turn is
+ * already under way and `complete`/`fail` would overwrite the status), and so
+ * is a finished one. With `kinds`, a job of any other kind is refused too; the
+ * kind check and the status change are one UPDATE, so a job the daemon claims
+ * at the same moment is reported as running, never cancelled.
+ */
+export function cancel(h: DbHandles, id: number, opts: { kinds?: readonly string[] } = {}): CancelResult {
+  const ts = new Date().toISOString();
+  const kinds = opts.kinds;
+  const kindClause = kinds ? ` AND kind IN (${kinds.map(() => '?').join(',') || 'NULL'})` : '';
+  const changed = h.raw.prepare(
+    `UPDATE jobs SET status='cancelled', updated_at=? WHERE id=? AND status='pending'${kindClause}`,
+  ).run(ts, id, ...(kinds ?? [])).changes;
+  if (changed > 0) return { ok: true };
+  const row = h.raw.prepare(`SELECT status, kind FROM jobs WHERE id=?`).get(id) as
+    { status: string; kind: string } | undefined;
+  if (!row) return { ok: false, reason: 'not_found' };
+  if (kinds && !kinds.includes(row.kind)) return { ok: false, reason: 'kind_not_allowed', ...row };
+  if (row.status === 'running') return { ok: false, reason: 'running', ...row };
+  return { ok: false, reason: 'not_active', ...row };
+}
