@@ -133,3 +133,14 @@ export {
 } from './jobs.js';
 export type { JobRow, NewJob } from './jobs.js';
 export { SCHEDULER_MIGRATIONS, runSchedulerMigrations } from './migrate.js';
+
+// Phase 10 re-exports: the scheduler MCP (scheduler#1) and the cancel primitive.
+export { cancel } from './jobs.js';
+export type { CancelResult } from './jobs.js';
+export {
+  AGENT_JOB_KINDS, MAX_ACTIVE_AGENT_JOBS, MAX_REMINDER_TEXT, MIN_RECURRENCE_INTERVAL_MS,
+  cancelAgentJob, checkRecurrence, checkReminderPayload, enqueueAgentJob, listAgentView, normalizeRunAt,
+} from './agent-jobs.js';
+export type { AgentJobContext, Checked, EnqueueArgs, EnqueuedJob, ListedJob } from './agent-jobs.js';
+export { SCHEDULER_MCP_ID, createJobsServer } from './mcp.js';
+export type { JobsServerOptions } from './mcp.js';

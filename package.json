@@ -31,12 +31,14 @@
     "prepublishOnly": "npm run build"
   },
   "bin": {
-    "fortytwo-scheduler": "dist/index.js"
+    "fortytwo-scheduler": "dist/index.js",
+    "fortytwo-scheduler-mcp": "dist/mcp.js"
   },
   "dependencies": {
     "@justfortytwo/memory": "1.0.1",
     "@justfortytwo/persona": "1.0.2",
     "@justfortytwo/runner": "1.0.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "croner": "^10.0.0",
     "p-queue": "^9.0.0"
   },
