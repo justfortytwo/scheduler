@@ -87,6 +87,17 @@ Then: `systemctl enable --now fortytwo-scheduler`
 | `CLAUDE_CONFIG_DIR` | no | Claude Code config dir, checked for user-level skills (default: `~/.claude`) |
 | `TELEGRAM_BINDINGS_DB` | no | Bindings db path, relative to the root (default: `state/telegram-bindings.db`); must match the bridge |
 
+### Approval notifications
+
+When the safety gate stages an approval, memory queues no job: the approval row
+waits with `notified_at` unset. On every poll (`POLL_MS`, 30 s) the daemon runs
+`notify_pending` for those approvals, sends the result like any notification,
+and then stamps `notified_at`. Each staged approval is notified at least once,
+including one staged while a notification is already running. The delay is up
+to one poll period, plus any job running ahead of it. A failed run stamps
+nothing and is retried after 1, 5, then 30 minutes. Requires memory with
+migration `006_approvals_notified_at`.
+
 ### Built-in schedules
 
 Three recurring jobs are built in. Each can be switched on or off per install.
