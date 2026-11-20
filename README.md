@@ -42,8 +42,13 @@ enqueue(h, { kind: 'reminder', run_at: new Date().toISOString(), payload: { text
 ```
 
 Exports: `enqueue`, `claimDue`, `complete`, `fail`, `listActive`, `requeueStale`,
-`existsPending`, `setRecurrence`, `MAX_ATTEMPTS`, `JobRow`, `NewJob`,
-`SCHEDULER_MIGRATIONS`, `runSchedulerMigrations`.
+`existsPending`, `setRecurrence`, `cancel`, `MAX_ATTEMPTS`, `JobRow`, `NewJob`,
+`CancelResult`, `SCHEDULER_MIGRATIONS`, `runSchedulerMigrations`.
+
+`cancel(h, id, { kinds? })` sets a **pending** job to `cancelled`, a terminal
+status nothing picks up again. A running or finished job is refused, and so is a
+job whose kind is not in `kinds` when given; the check and the change are one
+UPDATE, so a job the daemon claims at the same moment is reported as running.
 
 Every process that opens the database and touches jobs runs both migration
 lists: the daemon, the Telegram bridge and the installer. The migration keeps
@@ -51,6 +56,57 @@ its old name, `004_jobs`, in memory's `_migration_state` table under the same
 lock, so an existing install skips it; on a fresh database it runs after
 memory's migrations. `countPendingApprovals` stays in memory, which owns the
 `approvals` table.
+
+## Agent tools (MCP)
+
+The package ships a second bin, `fortytwo-scheduler-mcp`: a stdio MCP server
+that lets the assistant put jobs on this durable queue instead of a
+session-local cron. `fortytwo init` registers it in `.mcp.json` as
+`fortytwo-scheduler` (tools appear as `mcp__fortytwo-scheduler__*`):
+
+```json
+"fortytwo-scheduler": {
+  "command": "npx",
+  "args": ["-y", "-p", "@justfortytwo/scheduler", "fortytwo-scheduler-mcp"],
+  "env": { "DB_PATH": "db/fortytwo.db" }
+}
+```
+
+| Tool | What it does |
+| --- | --- |
+| `enqueue_job` | `{ kind, payload, run_at?, timezone?, recurrence? }`. Creates a job the daemon fires with no session open. |
+| `list_jobs` | Active jobs: **pending and running** rows, soonest first. System jobs are listed without their payload; `cancellable` marks the ones `cancel_job` accepts. |
+| `cancel_job` | `{ id }`. Cancels a pending reminder. |
+
+Rules (`src/agent-jobs.ts`):
+
+- **Kinds:** `reminder` only (`AGENT_JOB_KINDS`). `reply`, `notify_pending`,
+  `reembed_memory`, Oneiros and the built-in recurring kinds are system-owned:
+  the agent can neither create nor cancel them.
+- **Payload:** exactly `{ "text": "..." }`, one line, 1 to 500 characters
+  (`MAX_REMINDER_TEXT`). The text reaches a prompt as `Reminder: <text>`, so it is
+  treated as untrusted: other keys, newlines and control characters are rejected.
+- **`run_at`:** ISO-8601 with `Z` or an offset, or without one plus `timezone`
+  (IANA). Stored as UTC `toISOString()`. Malformed values, impossible dates and
+  times in the past are **rejected** (a past time is never fired immediately).
+- **`recurrence`:** a cron checked with croner in the install time zone (the one
+  the daemon reads crons in, UTC when none is saved), at most once an hour
+  (`MIN_RECURRENCE_INTERVAL_MS`). Without `run_at` the first run is the cron's next one.
+- **Cap:** at most 20 active reminders (`MAX_ACTIVE_AGENT_JOBS`), checked in the
+  same write transaction as the insert.
+- **Cancel:** pending reminders only; running jobs and built-in or system jobs are refused.
+
+The server runs no migrations. It opens `DB_PATH` (which must exist) with
+memory's `openDb` and shares the file with the daemon through WAL and
+`busy_timeout`; until the `jobs` table exists every tool returns an error.
+Env: `DB_PATH` (required), `FORTYTWO_ROOT` (where `.fortytwo/schedules.json`
+is read for the time zone; default: the working directory).
+
+**Safety gate:** with the gate on, the shipped capability manifest gives
+`mcp__fortytwo-scheduler__*` the `internal` tier: the tools only write the local
+database, and every scheduled turn later runs under the gate like any other.
+A manifest written before this entry existed holds these calls (unknown tools
+are `external`) until you add the line `"mcp__fortytwo-scheduler__*" = "internal"`.
 
 ## Run
 
