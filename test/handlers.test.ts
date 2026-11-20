@@ -114,6 +114,13 @@ describe('makeNotifyPendingHandler', () => {
     expect(runner.mock.calls[0]![0]).toContain('approval id: 42');
   });
 
+  it('run lists the approval ids from the outbox payload', async () => {
+    const runner = fakeRunner('notified');
+    const h = makeNotifyPendingHandler(runner);
+    await h.run(fakeCtx({ ids: ['pa_a', 'pa_b'] }));
+    expect(runner.mock.calls[0]![0]).toContain('approval ids: pa_a, pa_b');
+  });
+
   it('run omits id clause when no id in payload', async () => {
     const runner = fakeRunner('notified');
     const h = makeNotifyPendingHandler(runner);

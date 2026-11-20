@@ -19,10 +19,13 @@ import {
   enqueue,
   setRecurrence,
   countPendingApprovals,
+  listUnnotifiedApprovals,
+  markApprovalsNotified,
   type Embedder,
 } from '@justfortytwo/memory';
 import { claudeArgsFromEnv, createRunner } from '@justfortytwo/runner';
 import { tick, type TickDeps } from './tick.js';
+import { createApprovalOutbox } from './approval-outbox.js';
 import { heartbeatPath, writeHeartbeat } from './heartbeat.js';
 import { createJournalNotifier, createFanoutNotifier } from './notifier.js';
 import { buildRegistry, RECURRING_DEFS } from './handlers/index.js';
@@ -150,7 +153,8 @@ export interface DaemonOptions {
  * 3. Builds the TickDeps: claimDue / complete / fail bound to the DB handle,
  *    recurrenceNext (croner), enqueueRun (PQueue concurrency-1),
  *    notify (fanout: journal + optional extras), and the injected registry.
- * 4. Starts a 30-second setInterval poll loop with an overlap guard.
+ * 4. Starts a 30-second setInterval poll loop with an overlap guard. Each poll
+ *    drains due jobs, then notifies staged approvals not yet notified (outbox).
  *
  * Journal write: each notification is appended to the ConversationLog
  * (channel 'scheduler', no-op when @justfortytwo/transcript is absent). The
@@ -256,8 +260,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     registry,
   };
 
+  // Approval outbox: memory queues no job when an approval is staged, so each
+  // poll notifies the pending approvals whose notified_at is still NULL, then
+  // stamps them. Inside the overlap guard, so one approval is never sent twice
+  // by concurrent polls. Skipped when the registry has no notify_pending handler.
+  const notifyPending = registry.get('notify_pending');
+  const outbox = notifyPending
+    ? createApprovalOutbox({
+      listUnnotified: () => listUnnotifiedApprovals(h),
+      markNotified: (ids, at) => { markApprovalsNotified(h, ids, at); },
+      handler: notifyPending,
+      enqueueRun: deps.enqueueRun,
+      notify: deps.notify,
+      onError: (e) => {
+        process.stderr.write(`fortytwo-scheduler: approval notification failed: ${(e as Error)?.message ?? e}\n`);
+      },
+    })
+    : undefined;
+
   const { poll } = makePoll(async () => {
     await tick(deps, new Date().toISOString());
+    if (outbox) await outbox.drain(new Date().toISOString());
   });
 
   // Refresh the heartbeat on EVERY poll tick — outside the overlap guard — so a

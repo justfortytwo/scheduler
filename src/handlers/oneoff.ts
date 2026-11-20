@@ -5,6 +5,8 @@ import type { RunnerFn } from './recurring.js';
 interface TextPayload {
   text?: string;
   id?: number;
+  /** Approval ids, from the daemon's approval outbox (`../approval-outbox.ts`). */
+  ids?: string[];
 }
 
 function textPayload(ctx: RunCtx): TextPayload {
@@ -15,15 +17,18 @@ function textPayload(ctx: RunCtx): TextPayload {
 }
 
 /**
- * `notify_pending` — fires when a tool-call approval is staged and awaiting
- * the owner's decision. Summarises the pending approval(s) via LLM.
+ * `notify_pending` — tells the owner a tool-call approval is staged and awaiting
+ * their decision. Summarises the pending approval(s) via LLM. Run by the approval
+ * outbox with `payload.ids`; a queued job with the legacy `payload.id` still works.
  */
 export function makeNotifyPendingHandler(runner: RunnerFn): Handler {
   return {
     kind: 'notify_pending',
     async run(ctx: RunCtx): Promise<RunResult | null> {
-      const { id } = textPayload(ctx);
-      const idClause = id != null ? ` (approval id: ${id})` : '';
+      const { id, ids } = textPayload(ctx);
+      const idClause = Array.isArray(ids) && ids.length > 0
+        ? ` (approval ids: ${ids.join(', ')})`
+        : id != null ? ` (approval id: ${id})` : '';
       const r = await runner(
         `A tool call is awaiting your approval${idClause}. Summarize the pending approval(s) and ask me to approve or deny.`,
       );
