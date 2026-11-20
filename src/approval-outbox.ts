@@ -34,7 +34,7 @@ export interface ApprovalOutbox {
 }
 
 /**
- * A failed pass (the run threw) leaves the approvals un-notified and waits
+ * A failed pass (the run threw, produced no text, or delivery threw) leaves the approvals un-notified and waits
  * `backoffAt` (1, 5, then 30 minutes) before trying again, so a broken runner
  * does not start a `claude` turn on every poll.
  */
@@ -57,7 +57,10 @@ export function createApprovalOutbox(deps: ApprovalOutboxDeps): ApprovalOutbox {
         await deps.enqueueRun(async () => {
           try {
             const res = await deps.handler.run({ now, payload: { ids } });
-            if (res && res.text) await deps.notify({ kind: deps.handler.kind, text: res.text });
+            // Nothing to send (e.g. the runner timed out: ok:false, text:'') means
+            // the owner was not told: stamp nothing, retry after the backoff.
+            if (!res || !res.text) throw new Error('notify_pending produced no text to send');
+            await deps.notify({ kind: deps.handler.kind, text: res.text });
             deps.markNotified(ids, now);
             stamped = ids.length;
             failures = 0;
