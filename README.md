@@ -1,6 +1,6 @@
 # @justfortytwo/scheduler
 
-Durable job scheduler daemon for justfortytwo. Drains a `jobs` queue stored in `@justfortytwo/memory` and fires LLM turns only behind a cheap "is there work?" gate.
+Durable job scheduler daemon for justfortytwo. Owns the `jobs` queue (its schema and API), kept in the database opened by `@justfortytwo/memory`, and fires LLM turns only behind a cheap "is there work?" gate.
 
 ## Overview
 
@@ -25,6 +25,32 @@ await tick({
   notify,
 }, new Date().toISOString());
 ```
+
+## Jobs queue
+
+The scheduler owns the `jobs` table and the job API. Both used to live in
+`@justfortytwo/memory`; import them from here:
+
+```ts
+import { openDb, runMigrations } from '@justfortytwo/memory';
+import { runSchedulerMigrations, enqueue, existsPending, listActive } from '@justfortytwo/scheduler';
+
+const h = openDb('fortytwo.db');
+await runMigrations(h.k);          // memory's schema
+await runSchedulerMigrations(h.k); // the jobs table (migration 004_jobs)
+enqueue(h, { kind: 'reminder', run_at: new Date().toISOString(), payload: { text: 'hi' } });
+```
+
+Exports: `enqueue`, `claimDue`, `complete`, `fail`, `listActive`, `requeueStale`,
+`existsPending`, `setRecurrence`, `MAX_ATTEMPTS`, `JobRow`, `NewJob`,
+`SCHEDULER_MIGRATIONS`, `runSchedulerMigrations`.
+
+Every process that opens the database and touches jobs runs both migration
+lists: the daemon, the Telegram bridge and the installer. The migration keeps
+its old name, `004_jobs`, in memory's `_migration_state` table under the same
+lock, so an existing install skips it; on a fresh database it runs after
+memory's migrations. `countPendingApprovals` stays in memory, which owns the
+`approvals` table.
 
 ## Run
 
