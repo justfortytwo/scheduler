@@ -69,6 +69,33 @@ describe('createApprovalOutbox', () => {
     expect(deps.stamped).toEqual([['pa_1']]);
   });
 
+  it('a run with no text to send (e.g. runner timeout) stamps nothing and retries', async () => {
+    let calls = 0;
+    const run = vi.fn(async () => (++calls === 1 ? { ok: false, text: '' } : { ok: true, text: 'approve?' }));
+    const onError = vi.fn();
+    const deps = { ...fakeDeps(['pa_1'], { kind: 'notify_pending', run }), onError };
+    const outbox = createApprovalOutbox(deps);
+    expect(await outbox.drain(NOW)).toBe(0);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(deps.notified).toEqual([]);
+    expect(deps.stamped).toEqual([]);
+    expect(await outbox.drain('2026-11-20T10:01:00.000Z')).toBe(1);
+    expect(deps.notified).toEqual(['approve?']);
+  });
+
+  it('a failed delivery stamps nothing', async () => {
+    const run = vi.fn(async () => ({ ok: true, text: 'approve?' }));
+    const onError = vi.fn();
+    const deps = {
+      ...fakeDeps(['pa_1'], { kind: 'notify_pending', run }),
+      notify: async () => { throw new Error('telegram down'); },
+      onError,
+    };
+    expect(await createApprovalOutbox(deps).drain(NOW)).toBe(0);
+    expect(deps.stamped).toEqual([]);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
   it('a failing list call is reported, not thrown', async () => {
     const onError = vi.fn();
     const outbox = createApprovalOutbox({
