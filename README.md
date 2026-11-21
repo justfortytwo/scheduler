@@ -102,11 +102,15 @@ memory's `openDb` and shares the file with the daemon through WAL and
 Env: `DB_PATH` (required), `FORTYTWO_ROOT` (where `.fortytwo/schedules.json`
 is read for the time zone; default: the working directory).
 
-**Safety gate:** with the gate on, the shipped capability manifest gives
-`mcp__fortytwo-scheduler__*` the `internal` tier: the tools only write the local
-database, and every scheduled turn later runs under the gate like any other.
-A manifest written before this entry existed holds these calls (unknown tools
-are `external`) until you add the line `"mcp__fortytwo-scheduler__*" = "internal"`.
+**Safety gate:** with the gate on, the shipped capability manifest names each
+tool. `list_jobs` and `enqueue_job` get the `internal` tier: they only write the
+local database, within the caps above, and every scheduled turn later runs under
+the gate like any other. `cancel_job` gets `irreversible`, so cancelling waits
+for the owner's approval. A tool added later is held (unknown tools are
+`external`) until the manifest names it. A manifest written before these entries
+existed holds every call until you add
+`"mcp__fortytwo-scheduler__list_jobs" = "internal"` and
+`"mcp__fortytwo-scheduler__enqueue_job" = "internal"`.
 
 ## Run
 
