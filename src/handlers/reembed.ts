@@ -6,8 +6,9 @@ export interface ReembedOneFn {
 
 /**
  * `reembed_memory` — re-embeds a stored memory in-place after an
- * embedder/model change. Enqueued by `memory.store()` on every write;
- * consumed here with no LLM call (no notify — returns null).
+ * embedder/model change. Nothing enqueues it since memory 2.0.0 (`store()`
+ * embeds in its own write); kept for jobs queued by older installs. Runs with
+ * no LLM call (no notify — returns null).
  */
 export function makeReembedHandler(reembedOne: ReembedOneFn): Handler {
   return {
