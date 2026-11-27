@@ -69,6 +69,7 @@ function invokedAsBin(): boolean {
 
 if (invokedAsBin()) {
   const { startDaemon: boot } = await import('./daemon.js');
+  const { TELEGRAM_OUTPUT_PROMPT } = await import('./output-channel.js');
   const dbPath = process.env['DB_PATH'] ?? 'fortytwo.db';
 
   // Optional Telegram push: when TELEGRAM_BOT_TOKEN is set, wire a Telegram
@@ -79,6 +80,8 @@ if (invokedAsBin()) {
   // (comma-separated, same format as the bridge) when it is set; otherwise the
   // chats paired via `fortytwo pair`, read from the bridge's bindings db on
   // every notification. The bindings db is opened only in that second case.
+  // Each wired channel adds its notifier and, if it has one, its output note for scheduled runs.
+  const outputNotes: string[] = [];
   const extraNotifiers = await (async () => {
     const token = process.env['TELEGRAM_BOT_TOKEN'];
     if (!token) return [];
@@ -96,6 +99,7 @@ if (invokedAsBin()) {
         listBindings = () => store.list('telegram');
       }
       const tg = new Telegram(token, allowed);
+      outputNotes.push(TELEGRAM_OUTPUT_PROMPT);
       return [createTelegramPushNotifier({
         targets: pushTargets({ staticChatIds: [...allowed], listBindings }),
         send: (id, text) => tg.sendMessage(id, text).then(() => undefined),
@@ -110,7 +114,8 @@ if (invokedAsBin()) {
     }
   })();
 
-  boot({ dbPath, extraNotifiers }).catch((err: unknown) => {
+  const appendSystemPrompt = outputNotes.length > 0 ? outputNotes.join('\n\n') : undefined;
+  boot({ dbPath, extraNotifiers, appendSystemPrompt }).catch((err: unknown) => {
     process.stderr.write(`fortytwo-scheduler: ${(err as Error)?.stack ?? err}\n`);
     process.exit(1);
   });
@@ -121,6 +126,7 @@ export { loadTranscriptSource } from './oneiros.js';
 export { loadConversationLog, noopConversationLog } from './conversation-log.js';
 export type { ConversationEvent, ConversationLog } from './conversation-log.js';
 export { makeJournalWrite } from './daemon.js';
+export { TELEGRAM_OUTPUT_PROMPT, withAppendedSystemPrompt } from './output-channel.js';
 export { heldCall, heldNotice, reportingHeld, type HeldCall } from './held.js';
 
 // Approval outbox (memory#1): staged approvals are polled, notified, then stamped.

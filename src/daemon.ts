@@ -17,6 +17,7 @@ import {
   type Embedder,
 } from '@justfortytwo/memory';
 import { claudeArgsFromEnv, createRunner } from '@justfortytwo/runner';
+import { withAppendedSystemPrompt } from './output-channel.js';
 import { claimDue, complete, enqueue, fail, listActive, requeueStale, setRecurrence } from './jobs.js';
 import { runSchedulerMigrations } from './migrate.js';
 import { tick, type TickDeps } from './tick.js';
@@ -130,6 +131,11 @@ export interface DaemonOptions {
    */
   extraNotifiers?: Notifier[];
   /**
+   * Text added to the system prompt of scheduled Claude runs, e.g. the Telegram
+   * output note when results are pushed to Telegram. Not used by the Oneiros worker.
+   */
+  appendSystemPrompt?: string;
+  /**
    * Project root: where `.fortytwo/schedules.json` and `.claude/skills` live.
    * Defaults to `FORTYTWO_ROOT`, else the working directory.
    */
@@ -192,7 +198,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
   const registry: Registry = opts.registry ?? (() => {
     // Operator arguments (FORTYTWO_CLAUDE_ARGS) apply to scheduled runs like they do to chat.
     // The Oneiros worker builds its own locked-down runner and never receives them.
-    const runner = createRunner({ args: claudeArgsFromEnv() });
+    const claudeArgs = claudeArgsFromEnv();
+    const runner = createRunner({
+      args: opts.appendSystemPrompt ? withAppendedSystemPrompt(claudeArgs, opts.appendSystemPrompt) : claudeArgs,
+    });
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
     const skills = skillDirs(root, process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'));
     return buildRegistry({

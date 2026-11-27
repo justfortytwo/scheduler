@@ -24,6 +24,7 @@ src/
   mcp.ts            fortytwo-scheduler-mcp bin: enqueue_job / list_jobs / cancel_job over stdio; no migrations
   approval-outbox.ts  drain(): notify approvals with notified_at NULL, then stamp them
   held.ts           Notice for a scheduled run stopped by the safety gate (tool_deferred)
+  output-channel.ts Telegram output note (no Markdown tables) appended to scheduled runs when Telegram push is on
   oneiros.ts        Oneiros job seeding/handler wiring
   conversation-log.ts  ConversationLog adapter over @justfortytwo/transcript (no-op when absent)
   types.ts          Job, RunCtx, RunResult, Handler, Notification, Notifier, Registry
