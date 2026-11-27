@@ -3,7 +3,7 @@ import type { Job, Notification, Registry, RunCtx } from './types.js';
 export interface TickDeps {
   claimDue(now: string): Job[];
   complete(id: number, opts: { reschedule?: string }): void;
-  fail(id: number, error: string, opts?: { retryAt?: string }): void;
+  fail(id: number, error: string, opts?: { retryAt?: string; reschedule?: string }): void;
   registry: Registry;
   recurrenceNext(cron: string, now: string): string;
   enqueueRun(fn: () => Promise<void>): Promise<void>;
@@ -40,7 +40,7 @@ export async function tick(deps: TickDeps, now: string): Promise<void> {
       deps.fail(
         job.id,
         e instanceof Error ? e.message : String(e),
-        { retryAt: backoffAt(now, job.attempts) },
+        { retryAt: backoffAt(now, job.attempts), ...reschedule },
       );
       continue;
     }
@@ -54,7 +54,7 @@ export async function tick(deps: TickDeps, now: string): Promise<void> {
         deps.fail(
           job.id,
           e instanceof Error ? e.message : String(e),
-          { retryAt: backoffAt(now, job.attempts) },
+          { retryAt: backoffAt(now, job.attempts), ...reschedule },
         );
       }
     });

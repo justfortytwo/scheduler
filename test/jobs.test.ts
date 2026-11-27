@@ -47,6 +47,21 @@ describe('JobStore', () => {
     expect(listActive(h).find((j) => j.id === id)).toBeUndefined();
   });
 
+  it('fail at the cap moves a recurring row to its next slot instead of ending it', () => {
+    const id = enqueue(h, { kind: 'daily_briefing', run_at: '2020-01-01T00:00:00Z', recurrence: '57 7 * * *' });
+    for (let i = 0; i < 2; i++) {
+      claimDue(h, '2026-06-29T08:00:00Z');
+      fail(h, id, 'timeout', { retryAt: '2020-01-01T00:00:00Z', reschedule: '2026-06-30T07:57:00Z' });
+    }
+    claimDue(h, '2026-06-29T08:00:00Z');
+    fail(h, id, 'timeout', { retryAt: '2020-01-01T00:00:00Z', reschedule: '2026-06-30T07:57:00Z' });
+    const row = listActive(h).find((j) => j.id === id)!;
+    expect(row.status).toBe('pending');
+    expect(row.attempts).toBe(0);
+    expect(row.run_at).toBe('2026-06-30T07:57:00Z');
+    expect(row.last_error).toBe('timeout');
+  });
+
   it('requeueStale returns stale running rows to pending', () => {
     const id = enqueue(h, { kind: 'reminder', run_at: '2020-01-01T00:00:00Z' });
     claimDue(h, '2026-06-29T00:00:00Z');

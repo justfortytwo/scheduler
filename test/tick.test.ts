@@ -142,8 +142,16 @@ describe('tick()', () => {
     expect(deps.failCalls).toHaveLength(1);
     expect(deps.failCalls[0]![0]).toBe(job.id);
     expect(deps.failCalls[0]![1]).toContain('boom');
-    expect(deps.failCalls[0]![2]).toEqual({ retryAt: backoffAt(NOW, 0) });
+    expect(deps.failCalls[0]![2]).toEqual({ retryAt: backoffAt(NOW, 0), reschedule: '2026-06-29T13:05:00.000Z' });
     expect(deps.completeCalls).toHaveLength(0);
+  });
+
+  it('a one-off that throws is failed without a reschedule', async () => {
+    const job = makeJob({ recurrence: null });
+    const handler: Handler = { kind: 'test', run: async () => { throw new Error('boom'); } };
+    const deps = makeDeps([job], handler);
+    await tick(deps, NOW);
+    expect(deps.failCalls[0]![2]).toEqual({ retryAt: backoffAt(NOW, 0) });
   });
 
   it('no handler → fail with /no handler/, loop continues', async () => {
@@ -195,7 +203,7 @@ describe('tick()', () => {
     expect(handlerBad.run).not.toHaveBeenCalled();
     expect(deps.failCalls).toHaveLength(1);
     expect(deps.failCalls[0]![0]).toBe(job1.id);
-    expect(deps.failCalls[0]![2]).toEqual({ retryAt: backoffAt(NOW, job1.attempts) });
+    expect(deps.failCalls[0]![2]).toEqual({ retryAt: backoffAt(NOW, job1.attempts), reschedule: '2026-06-29T13:05:00.000Z' });
 
     // job 2 was NOT dropped — the batch continued
     expect(runSpy).toHaveBeenCalledOnce();
