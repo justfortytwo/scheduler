@@ -127,6 +127,7 @@ export { loadConversationLog, noopConversationLog } from './conversation-log.js'
 export type { ConversationEvent, ConversationLog } from './conversation-log.js';
 export { makeJournalWrite } from './daemon.js';
 export { TELEGRAM_OUTPUT_PROMPT, withAppendedSystemPrompt } from './output-channel.js';
+export { DEFAULT_TURN_TIMEOUT_S, TURN_TIMEOUT_ENV, failOnNoResult, turnTimeoutFromEnv } from './turn-timeout.js';
 export { heldCall, heldNotice, reportingHeld, type HeldCall } from './held.js';
 
 // Approval outbox (memory#1): staged approvals are polled, notified, then stamped.

@@ -18,6 +18,7 @@ import {
 } from '@justfortytwo/memory';
 import { claudeArgsFromEnv, createRunner } from '@justfortytwo/runner';
 import { withAppendedSystemPrompt } from './output-channel.js';
+import { failOnNoResult, turnTimeoutFromEnv } from './turn-timeout.js';
 import { claimDue, complete, enqueue, fail, listActive, requeueStale, setRecurrence } from './jobs.js';
 import { runSchedulerMigrations } from './migrate.js';
 import { tick, type TickDeps } from './tick.js';
@@ -199,13 +200,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<() => void> {
     // Operator arguments (FORTYTWO_CLAUDE_ARGS) apply to scheduled runs like they do to chat.
     // The Oneiros worker builds its own locked-down runner and never receives them.
     const claudeArgs = claudeArgsFromEnv();
+    // One turn at a time: a turn that never ends would hold every job behind it.
+    const timeoutMs = turnTimeoutFromEnv();
     const runner = createRunner({
       args: opts.appendSystemPrompt ? withAppendedSystemPrompt(claudeArgs, opts.appendSystemPrompt) : claudeArgs,
+      timeoutMs,
     });
     const reembedOne = (id: number): Promise<boolean> => reembed(h, embedder, id);
     const skills = skillDirs(root, process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'));
     return buildRegistry({
-      runner: async (prompt) => runner.run({ prompt }),
+      runner: failOnNoResult(async (prompt) => runner.run({ prompt }), timeoutMs),
       hasSkill: (name) => skillInstalled(name, skills),
       oneiros: oneirosEnabled(root) ? makeOneirosHandler(root, h, undefined, transcript) : undefined,
       countPendingApprovals: () => countPendingApprovals(h),
