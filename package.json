@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@justfortytwo/memory": "2.0.0",
-    "@justfortytwo/persona": "1.0.2",
+    "@justfortytwo/persona": "^1.0.2",
     "@justfortytwo/runner": "1.0.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "croner": "^10.0.0",
