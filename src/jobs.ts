@@ -52,11 +52,21 @@ export function complete(h: DbHandles, id: number, opts: { reschedule?: string }
   }
 }
 
-export function fail(h: DbHandles, id: number, error: string, opts: { retryAt?: string } = {}): void {
+/**
+ * Records a failed run. Below the cap the row retries at `retryAt`. At the cap a
+ * one-off becomes `failed`; a recurring row (`reschedule` given) keeps its error
+ * in `last_error` and moves to its next slot with attempts reset, so a run that
+ * keeps failing skips that slot instead of ending the schedule.
+ */
+export function fail(h: DbHandles, id: number, error: string, opts: { retryAt?: string; reschedule?: string } = {}): void {
   const ts = new Date().toISOString();
   const row = h.raw.prepare(`SELECT attempts FROM jobs WHERE id=?`).get(id) as { attempts: number } | undefined;
   const attempts = (row?.attempts ?? 0) + 1;
-  if (attempts >= MAX_ATTEMPTS) {
+  if (attempts >= MAX_ATTEMPTS && opts.reschedule) {
+    h.raw.prepare(
+      `UPDATE jobs SET status='pending', attempts=0, last_error=?, run_at=?, updated_at=? WHERE id=?`,
+    ).run(error, opts.reschedule, ts, id);
+  } else if (attempts >= MAX_ATTEMPTS) {
     h.raw.prepare(
       `UPDATE jobs SET status='failed', attempts=?, last_error=?, updated_at=? WHERE id=?`,
     ).run(attempts, error, ts, id);
