@@ -166,7 +166,7 @@ Then: `systemctl enable --now fortytwo-scheduler`
 | `OLLAMA_BASE_URL` | no | Ollama API base URL (default: `http://localhost:11434`) |
 | `CLAUDE_BIN` | no | Path to the `claude` CLI binary the runner spawns (default: `claude` on `PATH`) |
 | `FORTYTWO_CLAUDE_ARGS` | no | Extra arguments for every `claude` run, as a JSON array of strings (e.g. `["--chrome"]`). Set by `fortytwo start -- <args>`. Applies to scheduled runs, not to the Oneiros worker. A malformed value stops the daemon at boot. When Telegram push is on, the daemon also passes scheduled runs an output note through `--append-system-prompt` that asks for compact lists instead of Markdown tables. If the operator sets `--append-system-prompt`, the daemon keeps that value and adds the note after it. |
-| `FORTYTWO_TURN_TIMEOUT` | no | Per-turn timeout in seconds for a spawned `claude` run (default: `300`) |
+| `FORTYTWO_TURN_TIMEOUT` | no | Per-turn time limit in seconds for a scheduled `claude` run (default: `300`). The runner stops a turn that passes it, and the job fails into the normal retry (1 min, then 5 min, then `failed`). A value that is not a whole number of seconds from 1 to 2147483 stops the daemon at boot. The Oneiros worker keeps its own 120 s limit. |
 | `TELEGRAM_BOT_TOKEN` | optional | Telegram bot token — enables push notifications to Telegram |
 | `ALLOWED_CHAT_IDS` | optional | Comma-separated Telegram chat IDs; when set, notifications go to the **first** id. When unset, they go to every chat paired with `fortytwo pair` |
 | `FORTYTWO_ROOT` | no | Project root: holds `.fortytwo/schedules.json`, `.claude/skills` and the Telegram bindings db (default: the working directory) |

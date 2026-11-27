@@ -25,6 +25,7 @@ src/
   approval-outbox.ts  drain(): notify approvals with notified_at NULL, then stamp them
   held.ts           Notice for a scheduled run stopped by the safety gate (tool_deferred)
   output-channel.ts Telegram output note (no Markdown tables) appended to scheduled runs when Telegram push is on
+  turn-timeout.ts   FORTYTWO_TURN_TIMEOUT (default 300 s) for scheduled turns; a run with no result throws so the job retries
   oneiros.ts        Oneiros job seeding/handler wiring
   conversation-log.ts  ConversationLog adapter over @justfortytwo/transcript (no-op when absent)
   types.ts          Job, RunCtx, RunResult, Handler, Notification, Notifier, Registry
